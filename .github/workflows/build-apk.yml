@@ -51,6 +51,12 @@ jobs:
           sed -i 's/minSdkVersion 19/minSdkVersion 21/g' android/app/build.gradle
           sed -i 's/minSdk = 19/minSdk = 21/g' android/app/build.gradle
           
+          # Copy custom MainActivity with VPN support
+          if [ -f android-custom/MainActivity.kt ]; then
+            cp android-custom/MainActivity.kt android/app/src/main/kotlin/com/nexalink/app/MainActivity.kt
+            echo "Custom MainActivity.kt copied"
+          fi
+          
           echo "Android directory replaced with fresh Flutter project (SDK versions updated: compileSdk=34, minSdk=21)"
 
       - name: Install dependencies
