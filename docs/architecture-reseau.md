@@ -106,3 +106,26 @@ une preuve de son fonctionnement sur cette architecture. La perte réelle du
 réseau, les interruptions de service Android et les cycles complets
 Flutter–Kotlin–Go ne peuvent pas encore être validés : aucun service ni
 commande Flutter ne démarre le moteur. Les tests de mémoire restent partiels.
+
+## Préparation Android — rôles et cycle de vie
+
+Le propriétaire et l'invité restent séparés. Le nouveau contrôleur propriétaire
+est un composant interne pour un futur `VpnService` autorisé : il sérialise les
+appels au moteur sur un thread de travail, rejette le double démarrage et, sur
+notification de perte réseau, met l'arrêt en attente et interdit de réutiliser
+ce contrôleur. Un nouveau réseau exige une nouvelle sélection et un nouveau
+contrôleur ; aucun basculement vers le Wi-Fi n'est implémenté. Son état
+`RUNNING_LOCAL` ne prouve ni handshake ni Internet. La destruction attend
+l'arrêt dans le worker avant de publier `DESTROYED`. Si un callback natif est
+bloqué, l'arrêt ne peut toujours pas l'interrompre immédiatement. Les tests
+unitaires du contrôleur utilisent un moteur de test et ne prouvent pas le cycle
+réel d'un service Android, la perte réseau ou l'absence de fuite.
+
+Aucun service propriétaire n'est enregistré ou démarré, et le contrôleur n'est
+pas relié aux commandes Flutter. L'invité conserve l'adaptateur `GuestTunnel`
+existant et le backend `GoBackend` de WireGuard : il faut encore obtenir le
+consentement Android, un profil authentifié, et valider son cycle de vie réel.
+Le QR n'a pas été modifié ; il ne doit jamais contenir de clé privée. L'échange
+authentifié des clés publiques, la vérification de l'identité, la révocation
+réelle et l'intégration des services restent à concevoir et tester avant toute
+activation. Aucun de ces composants ne permet actuellement de partager Internet.

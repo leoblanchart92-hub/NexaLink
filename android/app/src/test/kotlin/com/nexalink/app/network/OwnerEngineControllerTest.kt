@@ -56,7 +56,20 @@ class OwnerEngineControllerTest {
         c.destroy(); assertEquals(OwnerState.STOPPING, c.state()); engine.release.countDown()
         assertTrue(worker.awaitTermination(5, TimeUnit.SECONDS))
         assertEquals(OwnerState.DESTROYED, c.state()); assertEquals(1, engine.stops.get())
-        assertFalse(start(c)); c.destroy()
+        assertFalse(start(c)); assertFalse(c.stop()); c.onNetworkLost(); c.destroy()
+    }
+
+    @Test fun reconnectRequiresNewController() {
+        val worker1 = Executors.newSingleThreadExecutor(); val worker2 = Executors.newSingleThreadExecutor()
+        val old = TestEngine(); val fresh = TestEngine()
+        val first = OwnerEngineController(old, worker1); val second = OwnerEngineController(fresh, worker2)
+        try {
+            old.release.countDown(); assertTrue(start(first)); drain(worker1)
+            first.onNetworkLost(); drain(worker1); assertFalse(start(first))
+            fresh.release.countDown(); assertTrue(start(second)); drain(worker2)
+            assertEquals(OwnerState.RUNNING_LOCAL, second.state())
+            assertTrue(second.stop()); drain(worker2)
+        } finally { worker1.shutdownNow(); worker2.shutdownNow() }
     }
 
     @Test fun failedStartIsNotReportedAsRunning() {

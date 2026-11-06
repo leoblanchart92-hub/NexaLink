@@ -41,10 +41,11 @@ internal class OwnerEngineController(
         true
     }
 
-    fun stop(): Boolean = synchronized(lock) { enqueueStop() }
+    fun stop(): Boolean = synchronized(lock) { if (destroyRequested) false else enqueueStop() }
 
     /** Permanently invalidates this controller; selecting a new network requires a new one. */
     fun onNetworkLost() = synchronized(lock) {
+        if (destroyRequested) return@synchronized
         networkLost = true
         if (state == OwnerState.IDLE || state == OwnerState.FAILED) state = OwnerState.NETWORK_LOST
         else if (state != OwnerState.DESTROYED && state != OwnerState.STOPPING) enqueueStop()
