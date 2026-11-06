@@ -1,0 +1,65 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, 'arena/**' ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.16.x'
+          channel: 'stable'
+          cache: true
+
+      - name: Replace Android directory with fresh Flutter project
+        run: |
+          # Remove existing android directory
+          rm -rf android
+          # Create fresh Flutter project
+          flutter create --project-name nexalink --platforms=android /tmp/flutter_temp
+          # Copy the entire android directory from fresh project
+          cp -r /tmp/flutter_temp/android .
+          # Update compileSdkVersion to 34 (required by plugins)
+          sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/compileSdk = 33/compileSdk = 34/g' android/app/build.gradle
+          echo "Android directory replaced with fresh Flutter project (SDK version updated to 34)"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create fresh Flutter project for testing
+        run: |
+          flutter create --project-name test_app /tmp/test_app
+          cd /tmp/test_app
+          flutter build apk --debug
+          echo "Fresh Flutter project builds successfully!"
+      
+      - name: Build APK
+        run: flutter build apk --debug
+
+      - name: Upload APK to Release
+        if: github.ref == 'refs/heads/arena/0c808a0f-nexalink'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.1
+          files: build/app/outputs/flutter-apk/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
