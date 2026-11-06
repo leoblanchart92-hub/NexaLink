@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexaLink - Partagez votre connexion Internet en toute sécurité</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <div class="logo">
+                    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                        <circle cx="20" cy="20" r="20" fill="url(#gradient)"/>
+                        <path d="M12 20L18 26L28 14" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="gradient" x1="0" y1="0" x2="40" y2="40">
+                                <stop stop-color="#3B82F6"/>
+                                <stop offset="1" stop-color="#8B5CF6"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <span class="brand-name">NexaLink</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Fonctionnalités</a>
+                <a href="#security">Sécurité</a>
+                <a href="#download">Télécharger</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-background"></div>
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 class="hero-title">
+                        Partagez votre connexion<br>
+                        <span class="gradient-text">en toute sécurité</span>
+                    </h1>
+                    <p class="hero-description">
+                        NexaLink vous permet de partager votre connexion Internet mobile 4G/5G avec d'autres appareils via un tunnel VPN WireGuard sécurisé.
+                    </p>
+                    <div class="hero-buttons">
+                        <a href="#download" class="btn btn-primary">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
+                            Télécharger l'APK
+                        </a>
+                        <a href="#features" class="btn btn-secondary">
+                            En savoir plus
+                        </a>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="stat">
+                            <div class="stat-value">256-bit</div>
+                            <div class="stat-label">Chiffrement</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">WireGuard</div>
+                            <div class="stat-label">Protocole VPN</div>
+                        </div>
+                        <div class="stat">
+                            <div class="stat-value">0</div>
+                            <div class="stat-label">Données collectées</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="phone-mockup">
+                        <div class="phone-screen">
+                            <div class="screen-header">
+                                <div class="status-bar">
+                                    <span>9:41</span>
+                                    <div class="status-icons">
+                                        <span>📶</span>
+                                        <span>🔋</span>
+                                    </div>
+                                </div>
+                                <div class="app-header">
+                                    <h3>NexaLink</h3>
+                                </div>
+                            </div>
+                            <div class="screen-content">
+                                <div class="vpn-toggle active">
+                                    <div class="toggle-circle"></div>
+                                    <span>ACTIF</span>
+                                </div>
+                                <div class="connection-info">
+                                    <div class="info-item">
+                                        <span class="label">Tunnel</span>
+                                        <span class="value">10.10.10.1</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Latence</span>
+                                        <span class="value">24ms</span>
+                                    </div>
+                                    <div class="info-item">
+                                        <span class="label">Invités</span>
+                                        <span class="value">2 connectés</span>
+                                    </div>
+                                </div>
+                                <div class="traffic-chart">
+                                    <div class="chart-line"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Fonctionnalités puissantes</h2>
+                <p class="section-description">Tout ce dont vous avez besoin pour partager votre connexion en toute sécurité</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                            <path d="M2 17l10 5 10-5"/>
+                            <path d="M2 12l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <h3>Mode Propriétaire</h3>
+                    <p>Contrôlez le partage de connexion, générez des QR codes, gérez les invités et surveillez la consommation en temps réel.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                            <line x1="12" y1="18" x2="12.01" y2="18"/>
+                        </svg>
+                    </div>
+                    <h3>Mode Invité</h3>
+                    <p>Scannez le QR code, connectez-vous instantanément et accédez à Internet via le tunnel sécurisé.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                    </div>
+                    <h3>WireGuard VPN</h3>
+                    <p>Tunnel VPN ultra-rapide avec chiffrement de bout en bout Curve25519 et ChaCha20.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="3" y1="9" x2="21" y2="9"/>
+                            <line x1="9" y1="21" x2="9" y2="9"/>
+                        </svg>
+                    </div>
+                    <h3>Tableau de bord</h3>
+                    <p>Statistiques en temps réel : vitesse, données transférées, latence et qualité de connexion.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                            <polyline points="22,6 12,13 2,6"/>
+                        </svg>
+                    </div>
+                    <h3>QR Code</h3>
+                    <p>Association simplifiée via QR code avec expiration automatique pour plus de sécurité.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+                        </svg>
+                    </div>
+                    <h3>Révocation</h3>
+                    <p>Révoquez l'accès à tout moment. Vous gardez le contrôle total sur vos invités.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Security Section -->
+    <section id="security" class="security">
+        <div class="container">
+            <div class="security-content">
+                <div class="security-text">
+                    <h2 class="section-title">Sécurité sans compromis</h2>
+                    <p class="section-description">Votre vie privée est notre priorité</p>
+                    <div class="security-features">
+                        <div class="security-item">
+                            <div class="security-icon">🔐</div>
+                            <div>
+                                <h4>Chiffrement militaire</h4>
+                                <p>Curve25519 pour l'échange de clés, ChaCha20-Poly1305 pour les données</p>
+                            </div>
+                        </div>
+                        <div class="security-item">
+                            <div class="security-icon">👥</div>
+                            <div>
+                                <h4>Consentement mutuel</h4>
+                                <p>Les deux appareils doivent approuver la connexion</p>
+                            </div>
+                        </div>
+                        <div class="security-item">
+                            <div class="security-icon">🚫</div>
+                            <div>
+                                <h4>Zéro collecte</h4>
+                                <p>Aucune donnée personnelle collectée, aucune surveillance</p>
+                            </div>
+                        </div>
+                        <div class="security-item">
+                            <div class="security-icon">⚡</div>
+                            <div>
+                                <h4>Révocation instantanée</h4>
+                                <p>Coupez l'accès à n'importe quel invité en un clic</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download">
+        <div class="container">
+            <div class="download-content">
+                <h2 class="section-title">Prêt à commencer ?</h2>
+                <p class="section-description">Téléchargez NexaLink et commencez à partager votre connexion en toute sécurité</p>
+                <div class="download-card">
+                    <div class="download-info">
+                        <div class="version-badge">v1.0.0</div>
+                        <h3>NexaLink pour Android</h3>
+                        <ul class="requirements">
+                            <li>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                Android 7.0 (API 24) ou supérieur
+                            </li>
+                            <li>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                Taille : ~15 MB
+                            </li>
+                            <li>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                                Installation depuis sources inconnues requise
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="download-action">
+                        <a href="https://github.com/leoblanchart92-hub/NexaLink/actions" target="_blank" class="btn btn-download">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                            </svg>
+                            Télécharger depuis GitHub
+                        </a>
+                        <p class="download-note">
+                            Cliquez sur le dernier build réussi → Artifacts → NexaLink-APK
+                        </p>
+                    </div>
+                </div>
+                <div class="install-steps">
+                    <h3>Comment installer ?</h3>
+                    <div class="steps-grid">
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <p>Téléchargez le fichier APK depuis GitHub Actions</p>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <p>Activez "Sources inconnues" dans les paramètres Android</p>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <p>Ouvrez le fichier APK et installez l'application</p>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <p>Lancez NexaLink et acceptez les permissions</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="logo">
+                        <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+                            <circle cx="20" cy="20" r="20" fill="url(#gradient2)"/>
+                            <path d="M12 20L18 26L28 14" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                            <defs>
+                                <linearGradient id="gradient2" x1="0" y1="0" x2="40" y2="40">
+                                    <stop stop-color="#3B82F6"/>
+                                    <stop offset="1" stop-color="#8B5CF6"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <span class="brand-name">NexaLink</span>
+                </div>
+                <div class="footer-links">
+                    <a href="https://github.com/leoblanchart92-hub/NexaLink" target="_blank">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                        GitHub
+                    </a>
+                </div>
+                <div class="footer-copyright">
+                    <p>&copy; 2024 NexaLink. Licence MIT.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
