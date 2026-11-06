@@ -1,13 +1,13 @@
 # NexaLink — fondation expérimentale
 
-**État : le partage Internet à distance et le VPN ne sont pas utilisables.** Des composants natifs WireGuard expérimentaux existent mais ne sont pas raccordés à l'interface ni testés sur appareils ; un prototype de passerelle existe séparément, mais n'est pas intégré à Android, et aucun relais n'est implémenté. Cette version ne transfère aucun trafic réseau d'un appareil à l'autre et ne doit pas être utilisée en production. L'application montre clairement cette limite.
+**État : le partage Internet à distance et le VPN ne sont pas utilisables.** Des composants natifs WireGuard expérimentaux existent mais ne sont pas raccordés à l'interface ni testés sur appareils ; une bibliothèque expérimentale de passerelle et son pont Android sont compilés, mais leur démarrage n'est pas raccordé à l'application ; aucun relais n'est implémenté. Cette version ne transfère aucun trafic réseau d'un appareil à l'autre et ne doit pas être utilisée en production. L'application montre clairement cette limite.
 
 ## Ce qui existe
 
 - Application Flutter Android : configuration d'un serveur HTTPS, création et lecture d'un QR d'invitation, demande explicite de l'invité, approbation/révocation par le propriétaire et consultation du statut d'association.
 - Serveur Node.js/SQLite : codes aléatoires à usage unique, expirant au bout de cinq minutes ; jetons aléatoires stockés sous forme de hachages ; accès séparés propriétaire/invité ; contrôle d'appartenance ; approbation explicite. Les identifiants de l'application sont stockés avec `flutter_secure_storage` et l'app refuse les URL HTTP et les redirections.
 - Préparation native : bibliothèque WireGuard Android, construction d'une configuration invitée, adaptateur de tunnel non exposé et primitives de sélection réseau cellulaire ; voir [l'étude technique et les limites](docs/architecture-reseau.md). Ces composants ne réalisent pas encore de partage.
-- Prototype Go séparé : paquets WireGuard, pile gVisor et flux TCP/UDP, testé en boucle locale sur CI uniquement. Il ne sélectionne pas de réseau mobile et n'est pas dans l'APK ; voir [gateway/README.md](gateway/README.md).
+- Prototype Go : WireGuard, pile gVisor et flux TCP/UDP, testé en boucle locale sur CI. Un pont gomobile/Kotlin expérimental est compilé dans l'APK et expose seulement un diagnostic de chargement à Flutter ; le partage ne peut pas être démarré depuis l'interface. Le lien vers le réseau cellulaire réel n'est pas validé ; voir [gateway/README.md](gateway/README.md).
 - Tests automatisés du protocole d'association et workflow GitHub Actions pour construire un APK **de développement**, signé avec une clé debug. La présence du workflow ne prouve pas que la compilation ou l'installation fonctionne : vérifier son résultat.
 
 L'association n'échange pas encore de clés WireGuard. Une approbation ou une révocation change seulement un état sur le serveur ; elle ne permet ni n'interrompt un tunnel existant. Ne partagez jamais un QR d'invitation publiquement. Le serveur d'association voit les noms choisis par les invités et les états d'association, pas les activités de navigation ; aucune infrastructure n'est fournie ou hébergée avec le dépôt.
@@ -39,4 +39,4 @@ Les jetons ne sont affichés qu'une fois et ne peuvent pas être récupérés. L
 
 ## Développement
 
-Avec Flutter 3.24.5 et le SDK Android installés : `flutter pub get`, `flutter analyze`, `flutter test`, `flutter build apk --release`. Test du backend : `cd backend && npm test`. Le dépôt ne contient pas de secrets de production ni d'APK précompilé.
+La compilation Android nécessite d'abord la génération de l'AAR Go avec gomobile et le NDK, effectuée automatiquement par GitHub Actions avant Flutter. Le fichier AAR est généré et non versionné. Test du backend : `cd backend && npm test`. Le dépôt ne contient pas de secrets de production ni d'APK précompilé.

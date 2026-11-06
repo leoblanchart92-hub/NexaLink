@@ -12,6 +12,25 @@ import java.util.concurrent.atomic.AtomicInteger
 /** JNI lifecycle/fail-closed smoke test; no VpnService or real mobile network. */
 @RunWith(AndroidJUnit4::class)
 class GoBridgeInstrumentedTest {
+    @Test fun startsAndStopsLocalEngineWithTestOnlyBinder() {
+        // This deliberately permissive stub is restricted to this isolated
+        // emulator test. It does NOT validate VPN protection or cellular routing.
+        val calls = AtomicInteger()
+        val binder = object : SocketBinder {
+            override fun bindSocket(fd: Int): Boolean { calls.incrementAndGet(); return true }
+        }
+        val engine = Mobile.newEngine(binder)
+        val a = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+        val b = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+        try {
+            val port = engine.start(a, b, "10.77.0.2", 0)
+            assertTrue(port in 1..65535)
+            assertTrue(calls.get() >= 2)
+            assertTrue(engine.statusJSON().contains("\"running\":true"))
+        } finally { engine.stop() }
+        assertTrue(engine.statusJSON().contains("\"running\":false"))
+    }
+
     @Test fun loadsGoAndRefusesToStartWhenBindingIsDenied() {
         assertTrue(Mobile.runtimeVersion().startsWith("go"))
         val calls = AtomicInteger()
