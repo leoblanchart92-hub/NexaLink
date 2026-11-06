@@ -39,5 +39,8 @@ dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    // Flutter integration_test brings an older test runner into debug runtime.
+    // Align both configurations to avoid Gradle's consistent-resolution conflict.
+    debugImplementation 'androidx.test:runner:1.5.2'
     androidTestImplementation 'androidx.test:runner:1.5.2'
 }
