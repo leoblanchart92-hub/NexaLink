@@ -1,0 +1,7 @@
+# Prototype local de passerelle
+
+Code expérimental **non intégré à l'APK**. `Gateway` connecte un TUN en mémoire de wireguard-go aux handlers TCP/UDP de tun2socks/gVisor. Le programme appelant doit configurer WireGuard avec la clé du pair et `AllowedIPs` correspondant à l'unique adresse invitée /32, et fournir une fonction de connexion explicitement liée à la connexion cellulaire. Aucun dialer par défaut ni relais n'est fourni. `PublicIPv4` est une première politique restrictive, pas un audit de sécurité. La bibliothèque n'est pas prête à servir des invités réels.
+
+Le test d'intégration lance deux vrais appareils wireguard-go en mémoire via UDP local, un invité et une passerelle, avec des serveurs TCP/UDP/DNS de test sur loopback. Il ne démontre pas la sortie mobile Android, la traversée de NAT ou la sécurité de production. Aucun réseau public n'est contacté par le test. Une politique de test autorise explicitement loopback ; la politique de production proposée l'interdit.
+
+Pas de liaison JNI/Android, de service, de gestion des clés et consentements, de révocation par invité ni de relais. Ne pas brancher ce prototype à l'application avant de sécuriser ces éléments et de tester la liaison cellulaire et la fermeture en cas de perte réseau. IPv4 TCP/UDP uniquement, les fragments IP, ICMP et IPv6 sont rejetés ; les résolutions DNS passent en UDP/TCP comme des flux ordinaires vers le serveur configuré par l'invité.
