@@ -17,3 +17,5 @@ android/app/libs/nexalink-gateway.aar
 android/app/libs/nexalink-gateway-sources.jar
 
 test-diagnostics/
+
+__pycache__/
