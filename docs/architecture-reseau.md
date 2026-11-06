@@ -118,8 +118,11 @@ contrôleur ; aucun basculement vers le Wi-Fi n'est implémenté. Son état
 `RUNNING_LOCAL` ne prouve ni handshake ni Internet. La destruction attend
 l'arrêt dans le worker avant de publier `DESTROYED`. Si un callback natif est
 bloqué, l'arrêt ne peut toujours pas l'interrompre immédiatement. Les tests
-unitaires du contrôleur utilisent un moteur de test et ne prouvent pas le cycle
-réel d'un service Android, la perte réseau ou l'absence de fuite.
+unitaires du contrôleur utilisent un moteur de test. Un test instrumenté associe
+également le contrôleur au vrai moteur Go et déclenche une notification de perte
+artificielle : il passe sur les émulateurs x86/x86_64 du run ci-dessous. Ces
+résultats ne prouvent pas le cycle réel d'un service Android, une perte réseau
+réelle ou l'absence de fuite.
 
 Aucun service propriétaire n'est enregistré ou démarré, et le contrôleur n'est
 pas relié aux commandes Flutter. L'invité conserve l'adaptateur `GuestTunnel`
@@ -138,6 +141,13 @@ Le processus a planté avec `SIGILL` dans `internal/cpu.getMIDR.abi0` au démarr
 Go ; la trace indique explicitement une architecture invitée arm64 traduite.
 Cela ne permet pas d'attribuer le problème à un téléphone ARM physique ni de
 valider ARM64. La même image Android 15 est 64 bits et ne propose pas de cible
-compatible pour l'APK ARM 32 bits. Une autre tentative ARM 32 bits est prévue
-sur une image Android 11 x86 avec traduction ; il faut vérifier le résultat.
-Les tests de traduction sont réels mais ne remplacent pas des tests sur CPU ARM.
+compatible pour l'APK ARM 32 bits. Dans le run
+[42229017826](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42229017826),
+une seconde tentative avec une APK limitée à armeabi-v7a sur Android 11 x86 a
+planté avec `SIGSEGV` (`SEGV_ACCERR` ; le rapport suggère un débordement de
+pile, sans le démontrer). Le programme n'a pas confirmé son architecture Go :
+ni l'exécution correcte d'ARM 32 bits, ni son cycle JNI ne sont validés. Ce run
+est globalement en échec sur les deux essais ARM ; les autres étapes, dont les
+JNI x86/x86_64, ont réussi. Les diagnostics sont conservés dans l'artefact du
+run. La cause des deux plantages reste à établir, et des tests sur CPU ARM
+physique sont indispensables.
