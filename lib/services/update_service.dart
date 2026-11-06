@@ -179,6 +179,36 @@ class UpdateService {
     return false;
   }
 
+  /// Get direct APK download URL for the latest release
+  Future<String?> getLatestApkUrl() async {
+    try {
+      final response = await http.get(
+        Uri.parse(_githubApiUrl),
+        headers: {'Accept': 'application/vnd.github.v3+json'},
+      );
+
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final assets = data['assets'] as List<dynamic>? ?? [];
+      
+      for (final asset in assets) {
+        final assetMap = asset as Map<String, dynamic>;
+        final name = assetMap['name'] as String? ?? '';
+        if (name.endsWith('.apk')) {
+          return assetMap['browser_download_url'] as String?;
+        }
+      }
+      
+      return null;
+    } catch (e) {
+      debugPrint('Error getting APK URL: $e');
+      return null;
+    }
+  }
+
   /// Get formatted download size
   String formatDownloadSize(int bytes) {
     if (bytes < 1024 * 1024) {

@@ -263,7 +263,8 @@ class UpdateDialog extends StatelessWidget {
     
     final uri = Uri.parse(updateInfo.downloadUrl!);
     if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+      // Use platform default mode for better APK download handling on Android
+      await launchUrl(uri, mode: LaunchMode.platformDefault);
     }
     
     if (context.mounted) {
