@@ -8,7 +8,11 @@ status=0
 for attempt in 1 2 3; do
   echo "Android instrumentation attempt $attempt/3"
   adb logcat -c
-  timeout 300 ./gradlew :app:connectedDebugAndroidTest 2>&1 | tee "${diagnostics}/gradle-${attempt}.log"
+  args=()
+  if [ -n "${NEXALINK_TEST_ABI:-}" ]; then
+    args+=("-PnexalinkTestAbi=${NEXALINK_TEST_ABI}" "-Pandroid.testInstrumentationRunnerArguments.expectedGoArch=${NEXALINK_GO_ARCH}")
+  fi
+  timeout 420 ./gradlew :app:connectedDebugAndroidTest "${args[@]}" 2>&1 | tee "${diagnostics}/gradle-${attempt}.log"
   status=${PIPESTATUS[0]}
   adb logcat -d -v threadtime > "${diagnostics}/logcat-${attempt}.log" 2>&1
   adb logcat -d -v brief -s Go:* > "${diagnostics}/go-${attempt}.log" 2>&1

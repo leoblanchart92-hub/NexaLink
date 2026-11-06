@@ -33,6 +33,10 @@ type SocketBinder interface { BindSocket(fd int32) bool }
 // nothing about VPN consent, a tunnel, a handshake or Internet availability.
 func RuntimeVersion() string { return runtime.Version() }
 
+// RuntimeArchitecture is a read-only diagnostic of the executing Go binary.
+// A cross-architecture emulator may translate these instructions on its host.
+func RuntimeArchitecture() string { return runtime.GOARCH }
+
 type Engine struct {
     mu sync.Mutex
     binder SocketBinder

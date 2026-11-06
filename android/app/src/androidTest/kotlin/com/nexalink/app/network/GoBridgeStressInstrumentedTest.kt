@@ -1,6 +1,7 @@
 package com.nexalink.app.network
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import mobile.Mobile
 import mobile.SocketBinder
 import org.junit.Assert.*
@@ -17,6 +18,10 @@ import java.util.concurrent.atomic.AtomicInteger
 class GoBridgeStressInstrumentedTest {
     private val a = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
     private val b = "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="
+    @Test fun nativeBinaryMatchesRequestedArchitecture() {
+        val expected = InstrumentationRegistry.getArguments().getString("expectedGoArch")
+        if (expected != null) assertEquals(expected, Mobile.runtimeArchitecture())
+    }
     private fun binder() = object : SocketBinder {
         override fun bindSocket(fd: Int): Boolean = fd >= 0
     }
