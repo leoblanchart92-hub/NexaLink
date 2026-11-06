@@ -12,16 +12,16 @@ import mobile.SocketBinder
  * cellular Network, stop on network loss/revoke and authenticate the peer first.
  * Starting is blocking: always invoke on a background thread.
  */
-internal class OwnerEngineAdapter(context: Context, vpn: VpnService, network: Network) {
+internal class OwnerEngineAdapter(context: Context, vpn: VpnService, network: Network) : LocalOwnerEngine {
     private val egress = CellularEgress(context)
     private val binder = object : SocketBinder {
         override fun bindSocket(fd: Int): Boolean = egress.protectAndBindFd(network, vpn, fd)
     }
     private val engine = Mobile.newEngine(binder)
 
-    fun start(privateKey: String, guestPublicKey: String, guestAddress: String, port: Int): Int =
+    override fun start(privateKey: String, guestPublicKey: String, guestAddress: String, port: Int): Int =
         engine.start(privateKey, guestPublicKey, guestAddress, port)
 
     fun statusJson(): String = engine.statusJSON()
-    fun stop() = engine.stop()
+    override fun stop() = engine.stop()
 }
