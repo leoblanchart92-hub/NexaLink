@@ -69,3 +69,12 @@ Il faudra héberger l'API HTTPS d'association, ainsi qu'un service public de sig
 - [Implémentation GoBackend, version utilisée](https://github.com/WireGuard/wireguard-android/blob/1.0.20230706/tunnel/src/main/java/com/wireguard/android/backend/GoBackend.java)
 - [Android VpnService](https://developer.android.com/reference/android/net/VpnService), [VPN Android](https://developer.android.com/develop/connectivity/vpn) et [Network.bindSocket](https://developer.android.com/reference/android/net/Network#bindSocket(java.net.Socket))
 - [WireGuard Go TUN](https://github.com/WireGuard/wireguard-go/tree/master/tun) et [gVisor netstack](https://github.com/google/gvisor/tree/master/pkg/tcpip/stack) : pistes à valider, pas des dépendances installées ou une preuve de fonctionnement.
+
+### Instabilité du moteur Android à corriger
+
+Les tests répétés sur l'émulateur Android x86_64 ont détecté un plantage
+intermittent du processus lors du démarrage/arrêt local du moteur : le runtime
+Go signale `bulkBarrierPreWrite: unaligned arguments`. Un passage réussi ne
+valide donc pas ce chemin. La cause exacte reste à isoler, puis à corriger et à
+retester, notamment sur les autres architectures. Le moteur reste inaccessible
+aux boutons de l'application et ne doit pas être activé pour le partage.
