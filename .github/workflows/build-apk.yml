@@ -83,40 +83,61 @@ jobs:
       - name: Build APK
         run: flutter build apk --debug
 
+      - name: Get next version
+        id: version
+        run: |
+          # Get latest tag and increment patch version
+          LATEST_TAG=$(gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "v1.1.0")
+          echo "Latest tag: $LATEST_TAG"
+          
+          # Extract version numbers
+          VERSION=$(echo $LATEST_TAG | sed 's/^v//')
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+          
+          # Increment patch version
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+          NEW_TAG="v$NEW_VERSION"
+          
+          echo "New version: $NEW_TAG"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload APK to Release
         if: success()
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.1.0
-          files: build/app/outputs/flutter-apk/app-debug.apk
-          name: "NexaLink v1.1.0 - Full Features"
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "NexaLink ${{ steps.version.outputs.tag }}"
           body: |
-            ## NexaLink v1.1.0 - Toutes les fonctionnalités restaurées
+            ## NexaLink ${{ steps.version.outputs.tag }}
             
-            ### ✅ Fonctionnalités complètes:
+            ### ✅ Fonctionnalités:
             - Mode Propriétaire/Invité
             - WireGuard VPN
             - QR code pairing
             - Limites de données par invité
-            - Tutoriel d'introduction
-            - Graphiques avancés (statistiques)
+            - Graphiques avancés
             - Code PIN de sécurité
             - Widget Android
             - Notifications intelligentes
             - Partage via lien
             - Mode sombre/clair/système
-            - Système de mises à jour
-            - Mode développeur
-            - Détection de vitesse
-            - Personnalisation des notifications
-            - Alerte de mauvaise connexion
+            - Et plus encore!
             
             ### 📱 Installation:
-            1. Téléchargez le fichier `app-debug.apk`
-            2. Ouvrez-le sur votre téléphone Android
-            3. Autorisez l'installation depuis sources inconnues si nécessaire
+            1. Téléchargez `app-debug.apk`
+            2. Ouvrez-le sur votre téléphone
+            3. Autorisez l'installation depuis sources inconnues
             4. Installez et profitez!
             
             🌐 Website: https://leoblanchart92-hub.github.io/NexaLink/
+          files: build/app/outputs/flutter-apk/app-debug.apk
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
