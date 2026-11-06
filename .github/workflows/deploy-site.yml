@@ -1,0 +1,51 @@
+name: Deploy Website to GitHub Pages
+
+on:
+  push:
+    branches: [ main, 'arena/**' ]
+    paths:
+      - 'site/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Create or checkout gh-pages branch
+          if git ls-remote --exit-code origin gh-pages; then
+            git checkout gh-pages
+            git reset --hard origin/gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . || true
+          fi
+          
+          # Copy site files
+          rm -rf ./*
+          git checkout origin/arena/0c808a0f-nexalink -- site/
+          mv site/* .
+          rm -rf site/
+          
+          # Create index redirect if needed
+          if [ ! -f index.html ]; then
+            echo "Error: index.html not found"
+            exit 1
+          fi
+          
+          # Commit and push
+          git add -A
+          git diff --cached --quiet || git commit -m "Deploy website from site/ folder"
+          git push origin gh-pages --force
