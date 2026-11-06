@@ -145,11 +145,21 @@ class AppProvider extends ChangeNotifier {
         await _storage.saveVpnConfig(_vpnConfig!, isOwner: true);
       }
 
-      // Get public IP for endpoint
-      _publicIp = await NetworkUtils.getPublicIp();
+      // Get public IP for endpoint (optional, don't block on failure)
+      try {
+        _publicIp = await NetworkUtils.getPublicIp();
+      } catch (e) {
+        _publicIp = null;
+      }
 
-      // Try connecting to relay server
-      await _signal.connect(AppConstants.defaultRelayHost);
+      // Try connecting to relay server (optional, don't block on failure)
+      try {
+        await _signal.connect(AppConstants.defaultRelayHost).timeout(
+          const Duration(seconds: 3),
+        );
+      } catch (e) {
+        // Relay connection is optional, continue without it
+      }
 
       _isLoading = false;
       notifyListeners();
