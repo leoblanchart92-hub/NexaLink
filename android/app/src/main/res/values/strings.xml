@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">NexaLink</string>
-    <string name="widget_description">Affiche le statut VPN NexaLink et permet un contrôle rapide</string>
-</resources>
