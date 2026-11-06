@@ -5,11 +5,12 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.Service
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.os.IBinder
 import android.os.ParcelFileDescriptor
-import androidx.core.app.NotificationCompat
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
@@ -46,6 +47,10 @@ class NexaLinkVpnService : VpnService() {
             }
         }
         return START_STICKY
+    }
+    
+    override fun onBind(intent: Intent?): IBinder? {
+        return null
     }
     
     private fun startVpn() {
@@ -136,7 +141,7 @@ class NexaLinkVpnService : VpnService() {
             ).apply {
                 description = "VPN connection notification"
             }
-            val manager = getSystemService(NotificationManager::class.java)
+            val manager = getSystemService(Service.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
     }
@@ -148,7 +153,14 @@ class NexaLinkVpnService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE
         )
         
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Notification.Builder(this, CHANNEL_ID)
+        } else {
+            @Suppress("DEPRECATION")
+            Notification.Builder(this)
+        }
+        
+        return builder
             .setContentTitle("NexaLink")
             .setContentText("VPN connection active")
             .setSmallIcon(android.R.drawable.ic_lock_lock)
