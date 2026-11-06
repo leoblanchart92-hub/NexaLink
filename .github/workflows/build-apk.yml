@@ -67,10 +67,39 @@ jobs:
         run: flutter build apk --debug
 
       - name: Upload APK to Release
-        if: github.ref == 'refs/heads/arena/0c808a0f-nexalink'
+        if: success()
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.0.1
+          tag_name: v1.1.0
           files: build/app/outputs/flutter-apk/app-debug.apk
+          name: "NexaLink v1.1.0 - Full Features"
+          body: |
+            ## NexaLink v1.1.0 - Toutes les fonctionnalités restaurées
+            
+            ### ✅ Fonctionnalités complètes:
+            - Mode Propriétaire/Invité
+            - WireGuard VPN
+            - QR code pairing
+            - Limites de données par invité
+            - Tutoriel d'introduction
+            - Graphiques avancés (statistiques)
+            - Code PIN de sécurité
+            - Widget Android
+            - Notifications intelligentes
+            - Partage via lien
+            - Mode sombre/clair/système
+            - Système de mises à jour
+            - Mode développeur
+            - Détection de vitesse
+            - Personnalisation des notifications
+            - Alerte de mauvaise connexion
+            
+            ### 📱 Installation:
+            1. Téléchargez le fichier `app-debug.apk`
+            2. Ouvrez-le sur votre téléphone Android
+            3. Autorisez l'installation depuis sources inconnues si nécessaire
+            4. Installez et profitez!
+            
+            🌐 Website: https://leoblanchart92-hub.github.io/NexaLink/
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
