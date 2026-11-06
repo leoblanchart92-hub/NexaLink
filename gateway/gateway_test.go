@@ -61,8 +61,18 @@ func TestWireGuardTCPUDPDNSRoundTrip(t *testing.T) {
     go func() { for { c, e := tcpListener.Accept(); if e != nil { return }; go func() { defer c.Close(); _ = c.SetDeadline(time.Now().Add(10*time.Second)); size := make([]byte, 2); if _, e := io.ReadFull(c,size); e != nil { return }; l:=int(binary.BigEndian.Uint16(size)); buf:=make([]byte,l); if _, e := io.ReadFull(c,buf); e != nil { return }; out:=buf; if string(buf)==string(query) { out=response }; binary.BigEndian.PutUint16(size,uint16(len(out))); _,_=c.Write(append(size,out...)) }() } }()
     go func() { buf:=make([]byte,65535); for { n, addr, e := udpListener.ReadFrom(buf); if e != nil { return }; out:=buf[:n]; if string(out)==string(query) { out=response }; _,_=udpListener.WriteTo(out,addr) } }()
     dialer := &net.Dialer{}
-    // Only this isolated test permits loopback. Production policy must reject it.
-    g, err := New(netip.MustParseAddr("10.77.0.2"), dialer.DialContext, func(ip netip.Addr, port uint16) bool { return ip == netip.MustParseAddr("127.0.0.1") }); if err != nil { t.Fatal(err) }
+    // Synthetic remote IP traverses the stacks, while this test-only dialer
+    // redirects strictly to local servers. Never used by the Android application.
+    dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
+        host, port, e := net.SplitHostPort(addr)
+        if e != nil || host != "1.1.1.1" { return nil, fmt.Errorf("unexpected destination") }
+        var want string
+        if network == "tcp4" { want = tcpListener.Addr().String() } else if network == "udp4" { want = udpListener.LocalAddr().String() } else { return nil, fmt.Errorf("unexpected network") }
+        _, expectedPort, _ := net.SplitHostPort(want)
+        if port != expectedPort { return nil, fmt.Errorf("unexpected port") }
+        return dialer.DialContext(ctx, network, want)
+    }
+    g, err := New(netip.MustParseAddr("10.77.0.2"), dial, func(ip netip.Addr, port uint16) bool { return ip == netip.MustParseAddr("1.1.1.1") }); if err != nil { t.Fatal(err) }
     defer g.Close()
     ownerPrivate, ownerPublic := keypair(t); guestPrivate, guestPublic := keypair(t)
     logger := device.NewLogger(device.LogLevelSilent, "")
@@ -76,14 +86,17 @@ func TestWireGuardTCPUDPDNSRoundTrip(t *testing.T) {
     if err := guest.IpcSet(fmt.Sprintf("private_key=%s\npublic_key=%s\nallowed_ip=0.0.0.0/0\nendpoint=127.0.0.1:%s\npersistent_keepalive_interval=25\n", guestPrivate, ownerPublic, port)); err != nil { t.Fatal(err) }
     if err := guest.Up(); err != nil { t.Fatal(err) }
 
+    _, tcpPort, _ := net.SplitHostPort(tcpListener.Addr().String())
+    _, udpPort, _ := net.SplitHostPort(udpListener.LocalAddr().String())
+    tcpTarget, udpTarget := net.JoinHostPort("1.1.1.1", tcpPort), net.JoinHostPort("1.1.1.1", udpPort)
     tcpExchange := func(payload, want []byte) {
         t.Helper(); ctx,cancel:=context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
-        c,e:=guestNet.DialContext(ctx,"tcp",tcpListener.Addr().String()); if e!=nil { t.Fatal(e) }; defer c.Close(); _=c.SetDeadline(time.Now().Add(10*time.Second))
+        c,e:=guestNet.DialContext(ctx,"tcp",tcpTarget); if e!=nil { t.Fatal(e) }; defer c.Close(); _=c.SetDeadline(time.Now().Add(10*time.Second))
         hdr:=make([]byte,2); binary.BigEndian.PutUint16(hdr,uint16(len(payload))); if _,e=c.Write(append(hdr,payload...)); e!=nil {t.Fatal(e)}
         if _,e=io.ReadFull(c,hdr); e!=nil {t.Fatal(e)}; out:=make([]byte,int(binary.BigEndian.Uint16(hdr))); if _,e=io.ReadFull(c,out); e!=nil {t.Fatal(e)}; if string(out)!=string(want) {t.Fatal("incorrect TCP response")}
     }
     udpExchange := func(payload, want []byte) {
-        t.Helper(); c,e:=guestNet.DialContext(context.Background(),"udp",udpListener.LocalAddr().String()); if e!=nil {t.Fatal(e)}; defer c.Close(); _=c.SetDeadline(time.Now().Add(10*time.Second)); if _,e=c.Write(payload); e!=nil {t.Fatal(e)}; buf:=make([]byte,4096); n,e:=c.Read(buf); if e!=nil {t.Fatal(e)}; if string(buf[:n])!=string(want) {t.Fatal("incorrect UDP response")}
+        t.Helper(); c,e:=guestNet.DialContext(context.Background(),"udp",udpTarget); if e!=nil {t.Fatal(e)}; defer c.Close(); _=c.SetDeadline(time.Now().Add(10*time.Second)); if _,e=c.Write(payload); e!=nil {t.Fatal(e)}; buf:=make([]byte,4096); n,e:=c.Read(buf); if e!=nil {t.Fatal(e)}; if string(buf[:n])!=string(want) {t.Fatal("incorrect UDP response")}
     }
     tcpExchange([]byte("tcp-payload"),[]byte("tcp-payload"))
     udpExchange([]byte("udp-payload"),[]byte("udp-payload"))

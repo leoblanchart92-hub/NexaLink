@@ -108,7 +108,7 @@ func relayTCP(a, b net.Conn) {
         for {
             _ = src.SetReadDeadline(time.Now().Add(2*time.Minute))
             n, err := src.Read(buf)
-            if n > 0 { if _, e := dst.Write(buf[:n]); e != nil { results <- e; return } }
+            if n > 0 { _ = dst.SetWriteDeadline(time.Now().Add(2*time.Minute)); written, e := dst.Write(buf[:n]); if e != nil { results <- e; return }; if written != n { results <- io.ErrShortWrite; return } }
             if err != nil {
                 if errors.Is(err, io.EOF) { if w, ok := dst.(interface{ CloseWrite() error }); ok { _ = w.CloseWrite() } }
                 results <- err; return
