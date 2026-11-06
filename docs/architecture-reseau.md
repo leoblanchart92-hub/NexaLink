@@ -129,3 +129,15 @@ Le QR n'a pas été modifié ; il ne doit jamais contenir de clé privée. L'éc
 authentifié des clés publiques, la vérification de l'identité, la révocation
 réelle et l'intégration des services restent à concevoir et tester avant toute
 activation. Aucun de ces composants ne permet actuellement de partager Internet.
+
+### Tentative ARM par traduction sur émulateur x86
+
+Le run [42226592497](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42226592497)
+a exécuté une APK limitée à ARM64 sur Android 15 x86_64 via la traduction ARM.
+Le processus a planté avec `SIGILL` dans `internal/cpu.getMIDR.abi0` au démarrage
+Go ; la trace indique explicitement une architecture invitée arm64 traduite.
+Cela ne permet pas d'attribuer le problème à un téléphone ARM physique ni de
+valider ARM64. La même image Android 15 est 64 bits et ne propose pas de cible
+compatible pour l'APK ARM 32 bits. Une autre tentative ARM 32 bits est prévue
+sur une image Android 11 x86 avec traduction ; il faut vérifier le résultat.
+Les tests de traduction sont réels mais ne remplacent pas des tests sur CPU ARM.

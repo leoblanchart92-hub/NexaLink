@@ -18,6 +18,7 @@ for attempt in 1 2 3; do
   adb logcat -d -v brief -s Go:* > "${diagnostics}/go-${attempt}.log" 2>&1
   cp -R ../build/app/outputs/androidTest-results/connected "${diagnostics}/results-${attempt}" 2>/dev/null
   if [ "$status" -ne 0 ]; then
+    rm -f /tmp/nexalink-{go,crash,selected}-part-*
     tail -c 1800 "${diagnostics}/gradle-${attempt}.log" | base64 -w0 | xargs -r -I{} echo "::notice title=INSTRUMENTED_FAILURE::{}"
     echo "::notice title=TEST_ABI::${NEXALINK_TEST_ABI:-host} ${NEXALINK_GO_ARCH:-host}"
     adb logcat -b crash -d -v brief > "${diagnostics}/crash-${attempt}.log" 2>&1

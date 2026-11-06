@@ -130,6 +130,7 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/android-instrumented-test.sh
       - name: Test JNI Android 15 x86_64
+        id: baseline_android
         uses: reactivecircus/android-emulator-runner@v2
         env:
           NEXALINK_DIAGNOSTIC_LABEL: android-35-x86_64
@@ -139,12 +140,25 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/android-instrumented-test.sh
 
-      - name: Exécuter les bibliothèques ARM traduites sur émulateur x86_64
+      - name: Tester ARM64 traduit sur Android 15 x86_64
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          NEXALINK_ARM_TARGET: arm64
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
+          disable-animations: true
+          script: bash .github/scripts/android-arm-translated-test.sh
+      - name: Tester ARM 32 bits traduit sur Android 11 x86
+        if: ${{ !cancelled() && steps.baseline_android.outcome == 'success' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          NEXALINK_ARM_TARGET: arm32
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86
           disable-animations: true
           script: bash .github/scripts/android-arm-translated-test.sh
 
