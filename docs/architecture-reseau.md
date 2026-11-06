@@ -78,3 +78,16 @@ Go signale `bulkBarrierPreWrite: unaligned arguments`. Un passage réussi ne
 valide donc pas ce chemin. La cause exacte reste à isoler, puis à corriger et à
 retester, notamment sur les autres architectures. Le moteur reste inaccessible
 aux boutons de l'application et ne doit pas être activé pour le partage.
+
+### Piste de correction du plantage cgo
+
+Le plantage reproduit sous Go 1.23.10 présente le même message que le défaut
+officiel [golang/go#46893](https://github.com/golang/go/issues/46893) : la
+structure d'arguments créée par cgo pour les appels exportés peut être mal
+alignée, et le ramasse-miettes Go peut terminer le processus. La correction cgo
+est incluse dans Go 1.26. La CI utilise désormais Go 1.26.10 pour vérifier cette
+piste. La concordance du message seule ne prouve pas que tous les plantages ont
+cette cause ; les tests répétés et la compatibilité des dépendances restent à
+valider. Le chargement/déchargement répété d'une bibliothèque native dans le
+même processus Android n'est pas pris en charge par cette API : les tests
+créent des objets moteur indépendants, sans prétendre décharger la bibliothèque.
