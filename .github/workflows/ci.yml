@@ -29,7 +29,14 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter analyze
+      - name: Flutter analyze
+        shell: bash
+        run: |
+          set +e
+          flutter analyze --no-pub 2>&1 | tee /tmp/nexalink-analyze.log
+          status=${PIPESTATUS[0]}
+          while IFS= read -r line; do echo "::notice::$line"; done < /tmp/nexalink-analyze.log
+          exit "$status"
       - run: flutter test
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
