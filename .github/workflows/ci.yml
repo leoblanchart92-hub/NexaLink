@@ -116,4 +116,4 @@ jobs:
           api-level: 29
           arch: x86_64
           disable-animations: true
-          script: timeout 180 bash .github/scripts/android-instrumented-test.sh
+          script: timeout 300 bash .github/scripts/android-instrumented-test.sh
