@@ -11,3 +11,7 @@ android/key.properties
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Generated in CI from gateway/mobile; do not commit the native archive.
+android/app/libs/nexalink-gateway.aar
+android/app/libs/nexalink-gateway-sources.jar

@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.VpnService
+import android.os.ParcelFileDescriptor
 import java.io.IOException
 import java.net.DatagramSocket
 import java.net.Socket
@@ -38,6 +39,20 @@ class CellularEgress(context: Context) {
 
     private fun checkNetwork(network: Network) {
         if (!isAllowed(manager.getNetworkCapabilities(network))) throw IOException("Cellular network unavailable or unvalidated")
+    }
+
+    /**
+     * Go owns fd. fromFd duplicates it; only the duplicate is closed here.
+     * This must run synchronously before Go connects/sends on the socket.
+     */
+    fun protectAndBindFd(network: Network, vpn: VpnService, fd: Int): Boolean {
+        if (fd < 0) return false
+        return try {
+            checkNetwork(network)
+            if (!vpn.protect(fd)) return false
+            ParcelFileDescriptor.fromFd(fd).use { duplicate -> network.bindSocket(duplicate.fileDescriptor) }
+            true
+        } catch (_: IOException) { false } catch (_: SecurityException) { false }
     }
 
     /** Protect first, then bind while unconnected. Caller owns and must close socket. */
