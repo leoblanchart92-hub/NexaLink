@@ -99,6 +99,12 @@ jobs:
           fi
           exit "$status"
       - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NexaLink-android-development-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
       - name: Activer la virtualisation pour l'émulateur Android
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -110,10 +116,4 @@ jobs:
           api-level: 29
           arch: x86_64
           disable-animations: true
-          script: cd android && ./gradlew :app:connectedDebugAndroidTest
-      - uses: actions/upload-artifact@v4
-        with:
-          name: NexaLink-android-development-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
-          retention-days: 14
+          script: timeout 180 bash .github/scripts/android-instrumented-test.sh
