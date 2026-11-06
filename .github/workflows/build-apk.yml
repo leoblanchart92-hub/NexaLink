@@ -38,23 +38,20 @@ jobs:
           # Copy the entire android directory from fresh project
           cp -r /tmp/flutter_temp/android .
           
-          # Display current build.gradle to debug
-          echo "=== Current android/app/build.gradle ==="
-          cat android/app/build.gradle
-          echo "========================================="
-          
-          # Try multiple patterns to update compileSdkVersion
+          # Update compileSdkVersion to 34 (required by plugins)
           sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/g' android/app/build.gradle
           sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/compileSdk = 33/compileSdk = 34/g' android/app/build.gradle
           
-          # Display updated build.gradle
-          echo "=== Updated android/app/build.gradle ==="
-          cat android/app/build.gradle
-          echo "========================================="
+          # Update minSdkVersion to 21 (required by mobile_scanner)
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle
+          sed -i 's/minSdkVersion 16/minSdkVersion 21/g' android/app/build.gradle
+          sed -i 's/minSdkVersion 19/minSdkVersion 21/g' android/app/build.gradle
+          sed -i 's/minSdk = 19/minSdk = 21/g' android/app/build.gradle
           
-          echo "Android directory replaced with fresh Flutter project (SDK version updated to 34)"
+          echo "Android directory replaced with fresh Flutter project (SDK versions updated: compileSdk=34, minSdk=21)"
 
       - name: Install dependencies
         run: flutter pub get
