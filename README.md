@@ -1,11 +1,12 @@
 # NexaLink — fondation expérimentale
 
-**État : le partage Internet à distance et le VPN ne sont pas implémentés.** Cette version n'est pas un VPN, ne transfère aucun trafic réseau d'un appareil à l'autre et ne doit pas être présentée comme une solution de sécurité ou utilisée en production. L'application montre clairement cette limite.
+**État : le partage Internet à distance et le VPN ne sont pas utilisables.** Des composants natifs WireGuard expérimentaux existent mais ne sont pas raccordés à l'interface ni testés sur appareils ; aucune passerelle ni relais n'est implémenté. Cette version ne transfère aucun trafic réseau d'un appareil à l'autre et ne doit pas être utilisée en production. L'application montre clairement cette limite.
 
 ## Ce qui existe
 
 - Application Flutter Android : configuration d'un serveur HTTPS, création et lecture d'un QR d'invitation, demande explicite de l'invité, approbation/révocation par le propriétaire et consultation du statut d'association.
 - Serveur Node.js/SQLite : codes aléatoires à usage unique, expirant au bout de cinq minutes ; jetons aléatoires stockés sous forme de hachages ; accès séparés propriétaire/invité ; contrôle d'appartenance ; approbation explicite. Les identifiants de l'application sont stockés avec `flutter_secure_storage` et l'app refuse les URL HTTP et les redirections.
+- Préparation native : bibliothèque WireGuard Android, construction d'une configuration invitée, adaptateur de tunnel non exposé et primitives de sélection réseau cellulaire ; voir [l'étude technique et les limites](docs/architecture-reseau.md). Ces composants ne réalisent pas encore de partage.
 - Tests automatisés du protocole d'association et workflow GitHub Actions pour construire un APK **de développement**, signé avec une clé debug. La présence du workflow ne prouve pas que la compilation ou l'installation fonctionne : vérifier son résultat.
 
 L'association n'échange pas encore de clés WireGuard. Une approbation ou une révocation change seulement un état sur le serveur ; elle ne permet ni n'interrompt un tunnel existant. Ne partagez jamais un QR d'invitation publiquement. Le serveur d'association voit les noms choisis par les invités et les états d'association, pas les activités de navigation ; aucune infrastructure n'est fournie ou hébergée avec le dépôt.
@@ -30,7 +31,7 @@ Les jetons ne sont affichés qu'une fois et ne peuvent pas être récupérés. L
 
 ## Travail restant indispensable
 
-1. Concevoir et intégrer WireGuard réel sur les deux téléphones, gestion locale des clés, consentement Android `VpnService`, échange authentifié des clés et révocation effective côté tunnel.
+1. Relier et tester le client WireGuard sur Android, implémenter le moteur propriétaire, la gestion locale des clés, le consentement Android `VpnService`, l’échange authentifié des clés et la révocation effective côté tunnel.
 2. Développer et tester le plan de données : relais pour NAT mobiles, protection des sockets contre les boucles VPN, transport chiffré, transfert et traduction du trafic sur le téléphone propriétaire, DNS, IPv4/IPv6, MTU, reconnexion et limites Android. Un relais classique WireGuard ne transforme pas à lui seul le téléphone propriétaire en routeur Internet ; une application Android ordinaire ne peut pas supposer qu'elle dispose de l'IP forwarding ou de privilèges root. Une solution en espace utilisateur doit être étudiée et vérifiée sur de vrais appareils. Le trafic devra effectivement sortir par la connexion mobile du propriétaire ; le forfait et l'opérateur peuvent imposer des restrictions et des frais.
 3. Ajouter mesures réelles de connexion et de consommation, gestion du cycle de vie/notifications Android, comptes récupérables et protections serveur, tests de sécurité, et signatures de publication.
 4. Vérifier en conditions réelles sur au moins deux téléphones, réseaux mobiles distincts et derrière NAT, avec et sans relais : sortie Internet, confidentialité, consentement et interruption après révocation. Rien de cela n'a encore été validé.

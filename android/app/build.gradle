@@ -7,7 +7,11 @@ android {
     namespace 'com.nexalink.app'
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
-    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
     kotlinOptions { jvmTarget = '17' }
     defaultConfig {
         applicationId 'com.nexalink.app'
@@ -20,3 +24,9 @@ android {
     buildTypes { release { signingConfig signingConfigs.debug } }
 }
 flutter { source '../..' }
+
+dependencies {
+    implementation 'com.wireguard.android:tunnel:1.0.20230706'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'
+    testImplementation 'junit:junit:4.13.2'
+}
