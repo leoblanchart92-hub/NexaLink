@@ -6,6 +6,7 @@ import mobile.SocketBinder
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -22,6 +23,10 @@ class GoBridgeStressInstrumentedTest {
 
     @Test(timeout = 180000) fun oneHundredFreshEnginesAndRestarts() {
         val version = Mobile.runtimeVersion()
+        // Warm the shared runtime before comparing descriptor counts.
+        val warm = Mobile.newEngine(binder())
+        try { assertTrue(warm.start(a, b, "10.77.0.2", 0) > 0) } finally { warm.stop() }
+        val fdBefore = File("/proc/self/fd").list()?.size ?: error("cannot inspect descriptors")
         repeat(100) {
             // Native libraries cannot safely be unloaded/reloaded by this API;
             // these are fresh Go engine objects, not shared-library reloads.
@@ -34,6 +39,8 @@ class GoBridgeStressInstrumentedTest {
             engine.stop()
             assertEquals(version, Mobile.runtimeVersion())
         }
+        val fdAfter = File("/proc/self/fd").list()?.size ?: error("cannot inspect descriptors")
+        assertTrue("descriptor count grew from $fdBefore to $fdAfter", fdAfter <= fdBefore + 8)
         val engine = Mobile.newEngine(binder())
         repeat(2) {
             try { assertTrue(engine.start(a, b, "10.77.0.2", 0) > 0) }
@@ -79,6 +86,21 @@ class GoBridgeStressInstrumentedTest {
         } finally { engine.stop(); pool.shutdownNow() }
     }
 
+    @Test(timeout = 30000) fun concurrentStartsAllowExactlyOneOwner() {
+        val engine = Mobile.newEngine(binder())
+        val pool = Executors.newFixedThreadPool(2)
+        val gate = CountDownLatch(1)
+        try {
+            val attempts = (0 until 2).map { pool.submit<Boolean> {
+                assertTrue(gate.await(10, TimeUnit.SECONDS))
+                try { engine.start(a, b, "10.77.0.2", 0); true } catch (_: Exception) { false }
+            } }
+            gate.countDown()
+            assertEquals(1, attempts.count { it.get(20, TimeUnit.SECONDS) })
+            assertTrue(engine.statusJSON().contains("\"running\":true"))
+        } finally { engine.stop(); pool.shutdownNow() }
+    }
+
     @Test(timeout = 30000) fun stopDuringBlockedStartClosesAfterCallbackReturns() {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -96,7 +118,9 @@ class GoBridgeStressInstrumentedTest {
         try {
             val start = pool.submit<Int> { engine.start(a, b, "10.77.0.2", 0) }
             assertTrue(entered.await(10, TimeUnit.SECONDS))
-            val stop = pool.submit { engine.stop() }
+            val stopping = CountDownLatch(1)
+            val stop = pool.submit { stopping.countDown(); engine.stop() }
+            assertTrue(stopping.await(10, TimeUnit.SECONDS))
             release.countDown()
             assertTrue(start.get(10, TimeUnit.SECONDS) > 0)
             stop.get(10, TimeUnit.SECONDS)

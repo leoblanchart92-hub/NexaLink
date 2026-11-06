@@ -99,6 +99,8 @@ jobs:
           fi
           exit "$status"
       - run: flutter build apk --release
+      - name: Vérifier les architectures natives empaquetées
+        run: python3 .github/scripts/check-android-abis.py
       - uses: actions/upload-artifact@v4
         with:
           name: NexaLink-android-development-apk
@@ -114,6 +116,25 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 29
+          arch: x86_64
+          disable-animations: true
+          script: bash .github/scripts/android-instrumented-test.sh
+
+      - name: Test JNI Android 6 x86
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          NEXALINK_DIAGNOSTIC_LABEL: android-23-x86
+        with:
+          api-level: 23
+          arch: x86
+          disable-animations: true
+          script: bash .github/scripts/android-instrumented-test.sh
+      - name: Test JNI Android 15 x86_64
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          NEXALINK_DIAGNOSTIC_LABEL: android-35-x86_64
+        with:
+          api-level: 35
           arch: x86_64
           disable-animations: true
           script: bash .github/scripts/android-instrumented-test.sh
