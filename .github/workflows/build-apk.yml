@@ -53,6 +53,7 @@ jobs:
           
           # Copy custom MainActivity with VPN support
           if [ -f android-custom/MainActivity.kt ]; then
+            mkdir -p android/app/src/main/kotlin/com/nexalink/app
             cp android-custom/MainActivity.kt android/app/src/main/kotlin/com/nexalink/app/MainActivity.kt
             echo "Custom MainActivity.kt copied"
           fi
