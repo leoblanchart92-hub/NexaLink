@@ -65,9 +65,15 @@ class WireGuardService {
       // Step 1: Request VPN permission from Android system
       final prepared = await prepareVpn();
       
-      // If permission not granted yet, wait a bit for user to accept
+      // If permission not granted yet, wait for user to accept
       if (!prepared) {
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 3));
+        // Try again after waiting
+        final preparedAgain = await prepareVpn();
+        if (!preparedAgain) {
+          _stateController.add(VpnState.error);
+          return false;
+        }
       }
 
       // Step 2: Start the VPN service
