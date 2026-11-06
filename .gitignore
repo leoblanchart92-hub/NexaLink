@@ -15,3 +15,5 @@ android/key.properties
 # Generated in CI from gateway/mobile; do not commit the native archive.
 android/app/libs/nexalink-gateway.aar
 android/app/libs/nexalink-gateway-sources.jar
+
+test-diagnostics/

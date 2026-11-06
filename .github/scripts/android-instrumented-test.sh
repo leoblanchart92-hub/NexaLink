@@ -1,28 +1,24 @@
 #!/usr/bin/env bash
-# A single successful run is insufficient: the JNI lifecycle has crashed
-# intermittently on the emulator. Fail the job on the first unsuccessful run.
+# Run real JNI tests repeatedly; no success retry and no suppressed failures.
 set +e
 cd android || exit 1
+mkdir -p ../test-diagnostics
 status=0
 for attempt in 1 2 3; do
   echo "Android instrumentation attempt $attempt/3"
-  ./gradlew :app:connectedDebugAndroidTest 2>&1 | tee /tmp/nexalink-instrumented.log
+  adb logcat -c
+  timeout 300 ./gradlew :app:connectedDebugAndroidTest 2>&1 | tee "../test-diagnostics/gradle-${attempt}.log"
   status=${PIPESTATUS[0]}
-  [ "$status" -ne 0 ] && break
+  adb logcat -d -v threadtime > "../test-diagnostics/logcat-${attempt}.log" 2>&1
+  adb logcat -d -v brief -s Go:* > "../test-diagnostics/go-${attempt}.log" 2>&1
+  cp -R ../build/app/outputs/androidTest-results/connected "../test-diagnostics/results-${attempt}" 2>/dev/null
+  if [ "$status" -ne 0 ]; then
+    tail -c 1800 "../test-diagnostics/gradle-${attempt}.log" | base64 -w0 | xargs -r -I{} echo "::notice title=INSTRUMENTED_FAILURE::{}"
+    head -c 12000 "../test-diagnostics/go-${attempt}.log" | split -b 1800 - /tmp/nexalink-go-part-
+    for part in /tmp/nexalink-go-part-*; do
+      [ -s "$part" ] && echo "::notice title=INSTRUMENTED_GO_${part##*-}::$(base64 -w0 "$part")"
+    done
+    break
+  fi
 done
-if [ "$status" -ne 0 ]; then
-  tail -c 2000 /tmp/nexalink-instrumented.log | split -b 2000 - /tmp/nexalink-log-part-
-  for part in /tmp/nexalink-log-part-*; do
-    echo "::notice title=INSTRUMENTED_LOG_${part##*-}::$(base64 -w0 "$part")"
-  done
-  # Go's fatal runtime trace is written under the Go logcat tag, not
-  # necessarily the Android crash buffer. Keep the first frames.
-  adb logcat -d -v brief -s Go:* 2>&1 | head -c 12000 | split -b 2000 - /tmp/nexalink-go-part-
-  for part in /tmp/nexalink-go-part-*; do
-    [ -s "$part" ] && echo "::notice title=INSTRUMENTED_GO_${part##*-}::$(base64 -w0 "$part")"
-  done
-  for xml in ../build/app/outputs/androidTest-results/connected/*/*.xml; do
-    if [ -f "$xml" ]; then echo "::notice title=INSTRUMENTED_XML::$(tail -c 2000 "$xml" | base64 -w0)"; fi
-  done
-fi
 exit "$status"

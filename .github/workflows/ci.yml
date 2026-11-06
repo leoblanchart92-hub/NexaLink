@@ -116,4 +116,13 @@ jobs:
           api-level: 29
           arch: x86_64
           disable-animations: true
-          script: timeout 300 bash .github/scripts/android-instrumented-test.sh
+          script: bash .github/scripts/android-instrumented-test.sh
+
+      - name: Conserver les journaux JNI et les résultats
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexaLink-android-test-diagnostics
+          path: test-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
