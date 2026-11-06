@@ -4,9 +4,12 @@ cd android || exit 1
 ./gradlew :app:connectedDebugAndroidTest 2>&1 | tee /tmp/nexalink-instrumented.log
 status=${PIPESTATUS[0]}
 if [ "$status" -ne 0 ]; then
-  echo "::notice title=INSTRUMENTED_LOG::$(tail -c 24000 /tmp/nexalink-instrumented.log | base64 -w0)"
+  tail -c 16000 /tmp/nexalink-instrumented.log | split -b 2000 - /tmp/nexalink-log-part-
+  for part in /tmp/nexalink-log-part-*; do
+    echo "::notice title=INSTRUMENTED_LOG_${part##*-}::$(base64 -w0 "$part")"
+  done
   for xml in app/build/outputs/androidTest-results/connected/*/*.xml; do
-    if [ -f "$xml" ]; then echo "::notice title=INSTRUMENTED_XML::$(base64 -w0 "$xml")"; fi
+    if [ -f "$xml" ]; then echo "::notice title=INSTRUMENTED_XML::$(tail -c 2000 "$xml" | base64 -w0)"; fi
   done
 fi
 exit "$status"
