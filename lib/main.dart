@@ -119,10 +119,12 @@ class _HomeState extends State<Home> {
   Future<void> invite() => run(() async {
     if (server == null || ownerToken == null) throw Exception('Configurez d’abord le serveur.');
     final data = await Api(server!).request('/v1/invitations', post: true, token: ownerToken);
-    if (mounted) setState(() {
+    if (mounted) {
+      setState(() {
       qr = jsonEncode({'version': 1, 'server': server.toString(), 'secret': data['secret']});
       qrExpiry = DateTime.fromMillisecondsSinceEpoch(data['expiresAt'] as int);
-    });
+      });
+    }
   });
   Future<void> action(String id, String action) => run(() async {
     await Api(server!).request('/v1/guests/$id/$action', post: true, token: ownerToken);
