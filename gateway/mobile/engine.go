@@ -13,6 +13,7 @@ import (
     "fmt"
     "net"
     "net/netip"
+    "runtime"
     "strconv"
     "strings"
     "sync"
@@ -27,6 +28,10 @@ import (
 // to the explicitly selected cellular network. False means fail closed.
 // The descriptor remains owned by Go; callers must not close it.
 type SocketBinder interface { BindSocket(fd int32) bool }
+
+// RuntimeVersion proves that the JNI-bound Go library was loaded. It says
+// nothing about VPN consent, a tunnel, a handshake or Internet availability.
+func RuntimeVersion() string { return runtime.Version() }
 
 type Engine struct {
     mu sync.Mutex

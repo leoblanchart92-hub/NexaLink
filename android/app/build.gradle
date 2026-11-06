@@ -19,6 +19,7 @@ android {
         targetSdk flutter.targetSdkVersion
         versionCode flutter.versionCode
         versionName flutter.versionName
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     // Deliberately debug-signed; this is a development artifact, not a production release.
     buildTypes { release { signingConfig signingConfigs.debug } }
@@ -30,4 +31,6 @@ dependencies {
     implementation files('libs/nexalink-gateway.aar')
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'
     testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
 }

@@ -1,11 +1,26 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 void main() => runApp(const NexaLink());
+
+/// Only checks that the native Go library can be loaded; it does not start VPN.
+class EngineDiagnostics {
+  static const channel = MethodChannel('nexalink/engine');
+  static Future<String?> runtimeVersion() async {
+    try {
+      return await channel.invokeMethod<String>('runtimeVersion');
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    }
+  }
+}
 
 /// Reject cleartext, credentials, query strings and paths; tokens must only go to
 /// the exact server the user chose. This is not a guarantee a server is trusted.
@@ -67,10 +82,16 @@ class _HomeState extends State<Home> {
   String? qr;
   DateTime? qrExpiry;
   bool busy = false;
+  String? engineRuntime;
+  bool engineChecked = false;
   int tab = 0;
 
-  @override void initState() { super.initState(); load(); }
+  @override void initState() { super.initState(); load(); loadEngineInfo(); }
   @override void dispose() { serverController.dispose(); nameController.dispose(); super.dispose(); }
+  Future<void> loadEngineInfo() async {
+    final version = await EngineDiagnostics.runtimeVersion();
+    if (mounted) setState(() { engineRuntime = version; engineChecked = true; });
+  }
   Future<void> load() async {
     final s = await storage.read(key: 'owner_server');
     final o = await storage.read(key: 'owner_token');
@@ -170,6 +191,12 @@ class _HomeState extends State<Home> {
       const Text('Connexion à distance', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
       const SizedBox(height: 12),
       Card(child: Padding(padding: const EdgeInsets.all(16), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.info_outline, color: Colors.lightBlueAccent), const SizedBox(width: 12), Expanded(child: Text('Version en développement : association uniquement. Le VPN et le partage Internet ne sont pas encore disponibles.', style: TextStyle(color: Colors.blue.shade100)))]))),
+      const SizedBox(height: 8),
+      Card(child: ListTile(
+        leading: const Icon(Icons.memory),
+        title: Text(!engineChecked ? 'Vérification du moteur natif…' : engineRuntime == null ? 'Moteur natif indisponible' : 'Moteur natif chargé, non démarré'),
+        subtitle: const Text('Tunnel et relais non activés · consommation indisponible'),
+      )),
       const SizedBox(height: 16),
       if (tab == 0) ...[
         const Text('Serveur d’association', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)), const SizedBox(height: 8),
