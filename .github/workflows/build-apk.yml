@@ -37,9 +37,23 @@ jobs:
           flutter create --project-name nexalink --platforms=android /tmp/flutter_temp
           # Copy the entire android directory from fresh project
           cp -r /tmp/flutter_temp/android .
-          # Update compileSdkVersion to 34 (required by plugins)
+          
+          # Display current build.gradle to debug
+          echo "=== Current android/app/build.gradle ==="
+          cat android/app/build.gradle
+          echo "========================================="
+          
+          # Try multiple patterns to update compileSdkVersion
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/g' android/app/build.gradle
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/g' android/app/build.gradle
           sed -i 's/compileSdkVersion 33/compileSdkVersion 34/g' android/app/build.gradle
           sed -i 's/compileSdk = 33/compileSdk = 34/g' android/app/build.gradle
+          
+          # Display updated build.gradle
+          echo "=== Updated android/app/build.gradle ==="
+          cat android/app/build.gradle
+          echo "========================================="
+          
           echo "Android directory replaced with fresh Flutter project (SDK version updated to 34)"
 
       - name: Install dependencies
