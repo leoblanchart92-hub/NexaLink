@@ -4,17 +4,13 @@ import android.app.Activity
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
-import android.os.ParcelFileDescriptor
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.io.FileDescriptor
-import java.net.DatagramSocket
-import java.net.InetSocketAddress
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.nexalink.app/vpn"
-    private var vpnTunnel: ParcelFileDescriptor? = null
+    private var vpnPrepared = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -27,51 +23,38 @@ class MainActivity : FlutterActivity() {
                         startActivityForResult(intent, 0)
                         result.success(false)
                     } else {
-                        onActivityResult(0, Activity.RESULT_OK, null)
+                        vpnPrepared = true
                         result.success(true)
                     }
                 }
                 "startVpn" -> {
                     try {
-                        val config = call.argument<Map<String, Any>>("config")
-                        val tunnelAddress = call.argument<String>("tunnelAddress") ?: "10.10.10.1/32"
-                        val ownerPublicKey = call.argument<String>("ownerPublicKey") ?: ""
-                        val guestPublicKey = call.argument<String>("guestPublicKey") ?: ""
-                        val endpoint = call.argument<String>("endpoint") ?: ""
-                        val port = call.argument<Int>("port") ?: 51820
+                        val intent = Intent(this, NexaLinkVpnService::class.java)
+                        intent.action = NexaLinkVpnService.ACTION_START
                         
-                        val builder = VpnService.Builder()
-                            .setConfigureIntent(null)
-                            .setSession("NexaLink")
-                        
-                        // Parse tunnel address
-                        val address = tunnelAddress.split("/")[0]
-                        builder.addAddress(address, 24)
-                        builder.addDnsServer("1.1.1.1")
-                        builder.addRoute("0.0.0.0", 0)
-                        builder.setMtu(1420)
-                        
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                            builder.setMetered(false)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
                         }
                         
-                        vpnTunnel = builder.establish()
-                        result.success(vpnTunnel != null)
+                        result.success(true)
                     } catch (e: Exception) {
                         result.error("VPN_ERROR", "Failed to start VPN: ${e.message}", null)
                     }
                 }
                 "stopVpn" -> {
                     try {
-                        vpnTunnel?.close()
-                        vpnTunnel = null
+                        val intent = Intent(this, NexaLinkVpnService::class.java)
+                        intent.action = NexaLinkVpnService.ACTION_STOP
+                        startService(intent)
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("VPN_ERROR", "Failed to stop VPN: ${e.message}", null)
                     }
                 }
                 "isVpnRunning" -> {
-                    result.success(vpnTunnel != null)
+                    result.success(NexaLinkVpnService.isRunning)
                 }
                 "getStats" -> {
                     result.success(mapOf(
@@ -89,13 +72,7 @@ class MainActivity : FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == 0 && resultCode == Activity.RESULT_OK) {
-            // VPN permission granted
+            vpnPrepared = true
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        vpnTunnel?.close()
-        vpnTunnel = null
     }
 }

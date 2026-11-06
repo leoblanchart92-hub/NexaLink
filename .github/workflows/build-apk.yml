@@ -51,12 +51,22 @@ jobs:
           sed -i 's/minSdkVersion 19/minSdkVersion 21/g' android/app/build.gradle
           sed -i 's/minSdk = 19/minSdk = 21/g' android/app/build.gradle
           
-          # Copy custom MainActivity with VPN support
+          # Copy custom Kotlin files with VPN support
+          mkdir -p android/app/src/main/kotlin/com/nexalink/app
           if [ -f android-custom/MainActivity.kt ]; then
-            mkdir -p android/app/src/main/kotlin/com/nexalink/app
             cp android-custom/MainActivity.kt android/app/src/main/kotlin/com/nexalink/app/MainActivity.kt
             echo "Custom MainActivity.kt copied"
           fi
+          if [ -f android-custom/NexaLinkVpnService.kt ]; then
+            cp android-custom/NexaLinkVpnService.kt android/app/src/main/kotlin/com/nexalink/app/NexaLinkVpnService.kt
+            echo "Custom NexaLinkVpnService.kt copied"
+          fi
+          
+          # Update AndroidManifest.xml to register VPN service
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          # Add VPN service before closing application tag
+          sed -i 's|</application>|<service android:name=".NexaLinkVpnService" android:permission="android.permission.BIND_VPN_SERVICE" android:exported="false"><intent-filter><action android:name="android.net.VpnService"/></intent-filter></service></application>|g' "$MANIFEST"
+          echo "AndroidManifest.xml updated with VPN service"
           
           echo "Android directory replaced with fresh Flutter project (SDK versions updated: compileSdk=34, minSdk=21)"
 
