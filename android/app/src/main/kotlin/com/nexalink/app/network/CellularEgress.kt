@@ -9,6 +9,11 @@ import java.io.IOException
 import java.net.DatagramSocket
 import java.net.Socket
 
+// Pure policy: testable without Android, but capability reporting and socket
+// binding still require real-device tests.
+internal fun isAllowedCellular(cellular: Boolean, wifi: Boolean, vpn: Boolean, internet: Boolean, validated: Boolean): Boolean =
+    cellular && !wifi && !vpn && internet && validated
+
 /**
  * Preliminary gateway egress primitive. No packets are forwarded by this class.
  * Selects only an existing validated cellular network; never falls back to Wi-Fi.
@@ -20,16 +25,26 @@ class CellularEgress(context: Context) {
     @Suppress("DEPRECATION") // allNetworks is available from API 21; active requests have different costs/lifecycle.
     fun validatedCellularNetwork(): Network? = manager.allNetworks.firstOrNull { network ->
         val caps = manager.getNetworkCapabilities(network)
-        caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) &&
-            !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        isAllowed(caps)
+    }
+
+    private fun isAllowed(caps: NetworkCapabilities?): Boolean = caps != null && isAllowedCellular(
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+        caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+    )
+
+    private fun checkNetwork(network: Network) {
+        if (!isAllowed(manager.getNetworkCapabilities(network))) throw IOException("Cellular network unavailable or unvalidated")
     }
 
     /** Protect first, then bind while unconnected. Caller owns and must close socket. */
     fun tcpSocket(network: Network, vpn: VpnService): Socket {
         val socket = Socket()
         try {
+            checkNetwork(network)
             if (!vpn.protect(socket)) throw IOException("VPN socket protection failed")
             network.bindSocket(socket)
             return socket
@@ -39,6 +54,7 @@ class CellularEgress(context: Context) {
     fun udpSocket(network: Network, vpn: VpnService): DatagramSocket {
         val socket = DatagramSocket(null)
         try {
+            checkNetwork(network)
             if (!vpn.protect(socket)) throw IOException("VPN socket protection failed")
             network.bindSocket(socket)
             return socket

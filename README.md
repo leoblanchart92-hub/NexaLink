@@ -1,12 +1,13 @@
 # NexaLink — fondation expérimentale
 
-**État : le partage Internet à distance et le VPN ne sont pas utilisables.** Des composants natifs WireGuard expérimentaux existent mais ne sont pas raccordés à l'interface ni testés sur appareils ; aucune passerelle ni relais n'est implémenté. Cette version ne transfère aucun trafic réseau d'un appareil à l'autre et ne doit pas être utilisée en production. L'application montre clairement cette limite.
+**État : le partage Internet à distance et le VPN ne sont pas utilisables.** Des composants natifs WireGuard expérimentaux existent mais ne sont pas raccordés à l'interface ni testés sur appareils ; un prototype de passerelle existe séparément, mais n'est pas intégré à Android, et aucun relais n'est implémenté. Cette version ne transfère aucun trafic réseau d'un appareil à l'autre et ne doit pas être utilisée en production. L'application montre clairement cette limite.
 
 ## Ce qui existe
 
 - Application Flutter Android : configuration d'un serveur HTTPS, création et lecture d'un QR d'invitation, demande explicite de l'invité, approbation/révocation par le propriétaire et consultation du statut d'association.
 - Serveur Node.js/SQLite : codes aléatoires à usage unique, expirant au bout de cinq minutes ; jetons aléatoires stockés sous forme de hachages ; accès séparés propriétaire/invité ; contrôle d'appartenance ; approbation explicite. Les identifiants de l'application sont stockés avec `flutter_secure_storage` et l'app refuse les URL HTTP et les redirections.
 - Préparation native : bibliothèque WireGuard Android, construction d'une configuration invitée, adaptateur de tunnel non exposé et primitives de sélection réseau cellulaire ; voir [l'étude technique et les limites](docs/architecture-reseau.md). Ces composants ne réalisent pas encore de partage.
+- Prototype Go séparé : paquets WireGuard, pile gVisor et flux TCP/UDP, testé en boucle locale sur CI uniquement. Il ne sélectionne pas de réseau mobile et n'est pas dans l'APK ; voir [gateway/README.md](gateway/README.md).
 - Tests automatisés du protocole d'association et workflow GitHub Actions pour construire un APK **de développement**, signé avec une clé debug. La présence du workflow ne prouve pas que la compilation ou l'installation fonctionne : vérifier son résultat.
 
 L'association n'échange pas encore de clés WireGuard. Une approbation ou une révocation change seulement un état sur le serveur ; elle ne permet ni n'interrompt un tunnel existant. Ne partagez jamais un QR d'invitation publiquement. Le serveur d'association voit les noms choisis par les invités et les états d'association, pas les activités de navigation ; aucune infrastructure n'est fournie ou hébergée avec le dépôt.

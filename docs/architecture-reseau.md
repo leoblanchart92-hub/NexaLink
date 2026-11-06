@@ -1,8 +1,24 @@
-# Étude du moteur réseau NexaLink — phase 2
+# Étude du moteur réseau NexaLink
+
+## Actualisation phase 3
+
+Le répertoire `gateway/` contient désormais un prototype Go séparé qui relie un TUN en mémoire `wireguard-go` à la pile gVisor via le composant `core` du projet tun2socks. Il ne crée pas de pile TCP/IP maison. Un test CI relie deux vrais pairs WireGuard en UDP local et fait traverser à leurs paquets des flux TCP, UDP et DNS vers des serveurs de test locaux, puis renvoie les réponses. Le dialer de test redirige explicitement l'adresse de destination synthétique vers ces serveurs locaux ; aucune sortie Internet ni connexion mobile n'est testée.
+
+La passerelle est limitée à un seul invité IPv4, valide la source des paquets, filtre les fragments et les protocoles autres que TCP/UDP, borne le nombre de flux et ferme les sockets au moment de la fermeture de la passerelle. WireGuard vérifie les clés du pair configuré ; le prototype ne réalise pas encore l'authentification d'identité, l'échange des clés, la révocation par invité ni l'isolation multi-invité. La politique d'adresses est une ébauche à auditer. Les appels Android `Network.bindSocket` et `VpnService.protect` existants ne sont pas reliés au dialer Go ; le bridge JNI, le transport WireGuard protégé, la gestion de perte de réseau et le service Android restent à développer. Il est impossible d'affirmer que la sortie cellulaire est forcée avant cette intégration et ses tests. L'APK ne contient pas ce prototype.
+
+Le test unitaire Kotlin vérifie uniquement la logique de sélection des capacités ; il ne teste pas `ConnectivityManager`, `Network.bindSocket` ni un réseau mobile réel. Le texte ci-dessous constitue l'étude initiale ; ses sections « à implémenter » restent valables pour l'intégration Android, même si certains éléments existent désormais en prototype local.
+
+## Comparaison des solutions
+
+- **wireguard-go** : authentifie/chiffre les datagrammes et s'adapte à un TUN en mémoire ; ne fait pas le NAT des connexions Internet.
+- **gVisor/netstack via tun2socks** : termine TCP/UDP en espace utilisateur et restitue les paquets de réponse ; ne fournit pas par lui-même un réseau cellulaire Android.
+- **tun2socks** : apporte l'interception de flux gVisor ; un proxy SOCKS distant n'est pas requis ici, car le prototype ouvre des sockets via un dialer injecté. Sur Android, ce dialer devra utiliser les primitives natives existantes et échouer si le réseau mobile disparaît.
+- **Sockets Android liés à Network** : candidats pour la sortie mobile, mais ils ne traitent pas à eux seuls des paquets IP. Leur intégration au moteur Go et leur protection contre la boucle VPN restent à construire.
+
 
 ## État vérifiable
 
-L'interface Flutter et l'API d'association existantes sont préservées. Le serveur d'association n'est ni un serveur WireGuard, ni un relais. La dépendance officielle `com.wireguard.android:tunnel:1.0.20230706` est intégrée ; les classes natives `GuestConfig` et `GuestTunnel` préparent un client via `GoBackend`, mais ne sont **pas raccordées à Flutter** et n'ont pas été exécutées sur Android. Aucun échange de clé ni aucune authentification de pair ne sont en place. Il n'y a ni tunnel activable, ni passerelle, ni relais, ni trafic Internet partagé dans l'application actuelle.
+L'interface Flutter et l'API d'association existantes sont préservées. Le serveur d'association n'est ni un serveur WireGuard, ni un relais. La dépendance officielle `com.wireguard.android:tunnel:1.0.20230706` est intégrée ; les classes natives `GuestConfig` et `GuestTunnel` préparent un client via `GoBackend`, mais ne sont **pas raccordées à Flutter** et n'ont pas été exécutées sur Android. Aucun échange de clé ni aucune authentification de pair ne sont en place. Il n'y a ni tunnel activable, ni passerelle Android, ni relais, ni trafic Internet partagé dans l'application actuelle.
 
 La bibliothèque officielle fournit un backend WireGuard en espace utilisateur sans root, reposant sur `VpnService`, et son service est déclaré par le manifeste de son AAR. Le code de cette version appelle `VpnService.prepare`, crée l'interface et protège les sockets WireGuard. Sa méthode `setState(UP)` indique seulement la création du tunnel local : elle ne prouve ni handshake, ni transfert, ni sortie Internet. Son implémentation indique aussi le VPN non mesuré (`setMetered(false)` sur Android Q+) et ne vérifie pas les retours de `protect` : ces points doivent être étudiés avant usage réel avec un forfait mobile. Notre adaptateur attend l'accord Android, travaille sur un thread de fond et n'est pas exposé à l'utilisateur. Le profil client construit utilise un peer, route IPv4 `0.0.0.0/0`, DNS IPv4 numérique, MTU 1280 et keepalive 25 secondes ; ce sont des paramètres de départ à tester, non des preuves de connectivité. Le client n'implémente pas IPv6 ; il faudra tester sur appareil qu'aucun trafic IPv6 ne contourne le VPN, y compris au démarrage, après arrêt et en cas de panne. Le kill switch Android « VPN permanent / bloquer sans VPN » est un réglage distinct et ne peut pas être promis par la construction du profil.
 

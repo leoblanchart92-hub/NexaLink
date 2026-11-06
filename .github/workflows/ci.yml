@@ -31,11 +31,11 @@ jobs:
           go mod tidy 2>&1 | tee /tmp/gateway-tidy.log
           status=${PIPESTATUS[0]}
           if [ "$status" -eq 0 ]; then
-            go test -v -timeout 90s ./... 2>&1 | tee /tmp/gateway-test.log
+            go test -race -v -timeout 120s ./... 2>&1 | tee /tmp/gateway-test.log
             status=${PIPESTATUS[0]}
-            echo "::notice title=GATEWAY_TEST_STATUS::$status"
-            echo "::notice title=GATEWAY_TEST_LOG::$(base64 -w0 /tmp/gateway-test.log)"
-            echo "::notice title=GATEWAY_MOD::$(base64 -w0 go.mod)"
+            if [ "$status" -ne 0 ]; then
+              echo "::notice title=GATEWAY_TEST_LOG::$(base64 -w0 /tmp/gateway-test.log)"
+            fi
           fi
           if [ "$status" -ne 0 ]; then
             cat /tmp/gateway-tidy.log /tmp/gateway-test.log 2>/dev/null | tail -n 80 | while IFS= read -r line; do echo "::notice::$line"; done

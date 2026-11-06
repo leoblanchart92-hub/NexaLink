@@ -58,7 +58,8 @@ func TestWireGuardTCPUDPDNSRoundTrip(t *testing.T) {
     query, response := dnsMessage(t)
     tcpListener, err := net.Listen("tcp4", "127.0.0.1:0"); if err != nil { t.Fatal(err) }; defer tcpListener.Close()
     udpListener, err := net.ListenPacket("udp4", "127.0.0.1:0"); if err != nil { t.Fatal(err) }; defer udpListener.Close()
-    go func() { for { c, e := tcpListener.Accept(); if e != nil { return }; go func() { defer c.Close(); _ = c.SetDeadline(time.Now().Add(10*time.Second)); size := make([]byte, 2); if _, e := io.ReadFull(c,size); e != nil { return }; l:=int(binary.BigEndian.Uint16(size)); buf:=make([]byte,l); if _, e := io.ReadFull(c,buf); e != nil { return }; out:=buf; if string(buf)==string(query) { out=response }; binary.BigEndian.PutUint16(size,uint16(len(out))); _,_=c.Write(append(size,out...)) }() } }()
+    closedUpstream := make(chan struct{}, 1)
+    go func() { for { c, e := tcpListener.Accept(); if e != nil { return }; go func() { defer c.Close(); _ = c.SetDeadline(time.Now().Add(10*time.Second)); size := make([]byte, 2); if _, e := io.ReadFull(c,size); e != nil { return }; l:=int(binary.BigEndian.Uint16(size)); buf:=make([]byte,l); if _, e := io.ReadFull(c,buf); e != nil { return }; out:=buf; if string(buf)==string(query) { out=response }; binary.BigEndian.PutUint16(size,uint16(len(out))); _,_=c.Write(append(size,out...)); if string(buf)=="hold" { _,_=io.Copy(io.Discard,c); closedUpstream <- struct{}{} } }() } }()
     go func() { buf:=make([]byte,65535); for { n, addr, e := udpListener.ReadFrom(buf); if e != nil { return }; out:=buf[:n]; if string(out)==string(query) { out=response }; _,_=udpListener.WriteTo(out,addr) } }()
     dialer := &net.Dialer{}
     // Synthetic remote IP traverses the stacks, while this test-only dialer
@@ -98,9 +99,30 @@ func TestWireGuardTCPUDPDNSRoundTrip(t *testing.T) {
     udpExchange := func(payload, want []byte) {
         t.Helper(); c,e:=guestNet.DialContext(context.Background(),"udp",udpTarget); if e!=nil {t.Fatal(e)}; defer c.Close(); _=c.SetDeadline(time.Now().Add(10*time.Second)); if _,e=c.Write(payload); e!=nil {t.Fatal(e)}; buf:=make([]byte,4096); n,e:=c.Read(buf); if e!=nil {t.Fatal(e)}; if string(buf[:n])!=string(want) {t.Fatal("incorrect UDP response")}
     }
+    // Wrong public key: encrypted packets cannot traverse the owner's peer.
+    badPrivate, _ := keypair(t)
+    badTun, badNet, err := netstack.CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.77.0.2")}, nil, 1280); if err != nil { t.Fatal(err) }
+    bad := device.NewDevice(badTun, wgconn.NewDefaultBind(), logger)
+    if err := bad.IpcSet(fmt.Sprintf("private_key=%s\npublic_key=%s\nallowed_ip=0.0.0.0/0\nendpoint=127.0.0.1:%s\n", badPrivate, ownerPublic, port)); err != nil { t.Fatal(err) }
+    if err := bad.Up(); err != nil { t.Fatal(err) }
+    badSocket, err := badNet.DialContext(context.Background(), "udp", udpTarget); if err != nil { t.Fatal(err) }
+    _ = badSocket.SetDeadline(time.Now().Add(500*time.Millisecond))
+    if _, err := badSocket.Write([]byte("unauthorized")); err != nil { t.Fatal(err) }
+    buf := make([]byte,128); if _, err := badSocket.Read(buf); err == nil { t.Fatal("unauthorized peer received response") }
+    _ = badSocket.Close(); bad.Close()
+
     tcpExchange([]byte("tcp-payload"),[]byte("tcp-payload"))
     udpExchange([]byte("udp-payload"),[]byte("udp-payload"))
     tcpExchange(query,response)
     udpExchange(query,response)
     var parsed dnsmessage.Message; if e:=parsed.Unpack(response); e!=nil || !parsed.Response || len(parsed.Answers)!=1 { t.Fatalf("invalid DNS response: %v",e) }
+    // Closing the gateway must actively close a live outgoing socket.
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second); defer cancel()
+    held, err := guestNet.DialContext(ctx, "tcp", tcpTarget); if err != nil { t.Fatal(err) }
+    _ = held.SetDeadline(time.Now().Add(5*time.Second))
+    if _, err := held.Write([]byte{0,4,'h','o','l','d'}); err != nil { t.Fatal(err) }
+    ack := make([]byte,6); if _, err := io.ReadFull(held, ack); err != nil { t.Fatal(err) }
+    g.Close()
+    select { case <-closedUpstream: case <-time.After(5*time.Second): t.Fatal("gateway left upstream socket open") }
+    _ = held.Close()
 }
