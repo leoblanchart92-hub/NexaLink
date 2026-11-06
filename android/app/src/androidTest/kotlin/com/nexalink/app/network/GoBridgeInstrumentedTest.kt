@@ -1,6 +1,10 @@
 package com.nexalink.app.network
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import android.util.Log
+import org.junit.Before
+import org.junit.Assert.assertEquals
 import mobile.Mobile
 import mobile.SocketBinder
 import org.junit.Assert.assertFalse
@@ -12,6 +16,11 @@ import java.util.concurrent.atomic.AtomicInteger
 /** JNI lifecycle/fail-closed smoke test; no VpnService or real mobile network. */
 @RunWith(AndroidJUnit4::class)
 class GoBridgeInstrumentedTest {
+    @Before fun verifyArchitecture() {
+        val actual = Mobile.runtimeArchitecture()
+        Log.i("NexaLinkABI", "Go runtime architecture: $actual")
+        InstrumentationRegistry.getArguments().getString("expectedGoArch")?.let { assertEquals(it, actual) }
+    }
     @Test fun startsAndStopsLocalEngineWithTestOnlyBinder() {
         // This deliberately permissive stub is restricted to this isolated
         // emulator test. It does NOT validate VPN protection or cellular routing.
