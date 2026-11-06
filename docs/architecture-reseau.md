@@ -91,3 +91,18 @@ cette cause ; les tests répétés et la compatibilité des dépendances restent
 valider. Le chargement/déchargement répété d'une bibliothèque native dans le
 même processus Android n'est pas pris en charge par cette API : les tests
 créent des objets moteur indépendants, sans prétendre décharger la bibliothèque.
+
+### Couverture de stabilisation et limites
+
+La CI exécute trois fois une suite comprenant 100 créations/démarrages/arrêts
+de moteurs par émulateur, des appels concurrents, le double démarrage, une
+configuration invalide, un arrêt demandé pendant un démarrage et un contrôle
+du nombre de descripteurs. Les tests utilisent un callback permissif de test,
+pas une protection VPN. Un test Go distinct ferme un flux TCP actif local.
+Les émulateurs configurés sont Android 6 x86, Android 10 x86_64 et Android 15
+x86_64 ; ils ne remplacent pas des essais sur téléphones ARM. Les quatre ABI
+Go sont contrôlées dans l'AAR, mais la présence d'une bibliothèque n'est pas
+une preuve de son fonctionnement sur cette architecture. La perte réelle du
+réseau, les interruptions de service Android et les cycles complets
+Flutter–Kotlin–Go ne peuvent pas encore être validés : aucun service ni
+commande Flutter ne démarre le moteur. Les tests de mémoire restent partiels.

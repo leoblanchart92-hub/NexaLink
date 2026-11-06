@@ -1,6 +1,6 @@
 module github.com/leoblanchart92-hub/NexaLink/gateway
 
-go 1.23.1
+go 1.26.0
 
 require (
 	github.com/xjasonlyu/tun2socks/v2 v2.6.0

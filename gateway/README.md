@@ -11,3 +11,19 @@ Le pont JNI existe, mais il n'y a pas de service propriétaire opérationnel, de
 `mobile.Engine` démarre un endpoint WireGuard pour un pair et utilise le moteur de ce dossier. La liaison doit recevoir un callback Kotlin qui protège les descripteurs et les lie à un réseau cellulaire validé ; tout refus interrompt l'opération. Ce contrat et l'appel Kotlin/Go sont vérifiés par tests, mais pas la sélection ou l'utilisation d'un réseau mobile physique. `OwnerEngineAdapter` exige un `VpnService` autorisé et un `Network`, mais aucun service ni gestionnaire de cycle de vie ne l'instancie encore. Il ne faut pas le connecter aux boutons sans gestion de perte réseau, révocation, authentification des pairs et validation de sécurité. Les compteurs disponibles sont des octets WireGuard, pas une preuve de sortie Internet.
 
 Le workflow CI génère l'AAR via gomobile pour arm64, arm, x86_64 et x86, puis l'utilise pour compiler l'APK ; l'AAR n'est pas commité. Des tests sur émulateur vérifient le chargement JNI, l'appel de callback, le refus de démarrer sans protection et le démarrage/arrêt local avec un callback de test volontairement permissif. **Ce callback de test ne prouve pas la protection VPN ou la sortie cellulaire et ne doit jamais être utilisé en production.**
+
+## Stabilité et compilation
+
+Go 1.26 au minimum est requis : les versions antérieures ont un défaut
+cgo connu ([golang/go#46893](https://github.com/golang/go/issues/46893))
+suspecté dans les plantages observés. La CI utilise Go 1.26.10 et conserve
+les journaux des tests instrumentés. Une réussite des tests ne prouve ni
+l'absence de fuite mémoire ni la stabilité sur toutes les architectures.
+Le moteur reste expérimental et le partage désactivé.
+
+L'API ne permet pas de décharger/recharger de façon fiable la bibliothèque
+native dans un processus Android ; les tests répètent la création d'objets et
+le démarrage/arrêt, sans présenter cela comme un déchargement. Les appels sont
+sérialisés par le verrou Go : un arrêt demandé pendant un callback de démarrage
+attend que ce callback revienne ; il ne l'interrompt pas. Un futur service devra
+gérer ce délai et la disparition du réseau sans bloquer le thread principal.
