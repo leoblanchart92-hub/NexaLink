@@ -80,11 +80,11 @@ class OwnerVpnServiceInstrumentedTest {
             assertTrue(OwnerSessionRequest.stage(parameters))
             context.startService(intent)
             assertTrue("a fresh service should start", awaitState(OwnerServiceState.RUNNING_LOCAL))
-            context.stopService(intent)
+            context.startService(Intent(context, OwnerVpnService::class.java).setAction(OwnerVpnService.ACTION_STOP))
             assertTrue("native cleanup must finish", awaitState(OwnerServiceState.STOPPED))
         } finally {
             shell("svc data enable")
-            context.stopService(intent)
+            context.startService(Intent(context, OwnerVpnService::class.java).setAction(OwnerVpnService.ACTION_STOP))
             OwnerSessionRequest.clear()
             appOp("ignore")
         }

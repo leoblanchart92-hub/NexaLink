@@ -50,6 +50,7 @@ internal object OwnerServiceStateMonitor {
  * This service is not started by the product UI until security/routing are ready.
  */
 class OwnerVpnService : VpnService() {
+    companion object { internal const val ACTION_STOP = "com.nexalink.app.owner.STOP" }
     private val lock = Any()
     private val worker = Executors.newSingleThreadExecutor()
     private var stopping = false
@@ -62,6 +63,10 @@ class OwnerVpnService : VpnService() {
     private val egress by lazy { CellularEgress(this) }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            requestStop()
+            return START_NOT_STICKY
+        }
         synchronized(lock) {
             if (started || stopping) return START_NOT_STICKY
             started = true

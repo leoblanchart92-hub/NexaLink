@@ -75,11 +75,12 @@ class GuestVpnServiceInstrumentedTest {
                     var received = false
                     repeat(10) {
                         if (!received) {
-                            val command = instrumentation.uiAutomation.executeShellCommand(
-                                "sh -c 'echo nexalink | nc -u -w 1 198.18.0.1 5555'"
-                            )
-                            val output = ParcelFileDescriptor.AutoCloseInputStream(command).use { String(it.readBytes()) }
-                            if (output.isNotBlank()) Log.i("NexaLinkVPN", "Probe command: $output")
+                            // This receiver runs as the separately installed test APK UID,
+                            // not as the VPN app or privileged adb shell.
+                            context.sendBroadcast(Intent().setClassName(
+                                instrumentation.context.packageName,
+                                "com.nexalink.app.network.VpnProbeReceiver",
+                            ))
                             try { socket.receive(packet); received = true }
                             catch (_: java.net.SocketTimeoutException) { }
                         }
