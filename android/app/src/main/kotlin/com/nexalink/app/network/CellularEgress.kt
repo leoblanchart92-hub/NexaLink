@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import java.io.IOException
 import java.net.DatagramSocket
 import java.net.Socket
@@ -49,12 +50,19 @@ class CellularEgress(context: Context) {
      */
     fun protectAndBindFd(network: Network, vpn: VpnService, fd: Int): Boolean {
         if (fd < 0) return false
+        var phase = "network"
         return try {
             checkNetwork(network)
-            if (!vpn.protect(fd)) return false
+            phase = "protect"
+            if (!vpn.protect(fd)) { Log.w("NexaLinkOwner", "Socket protection rejected"); return false }
+            phase = "bind"
             ParcelFileDescriptor.fromFd(fd).use { duplicate -> network.bindSocket(duplicate.fileDescriptor) }
             true
-        } catch (_: IOException) { false } catch (_: SecurityException) { false }
+        } catch (failure: IOException) {
+            Log.w("NexaLinkOwner", "Socket $phase failed: ${failure.javaClass.simpleName}"); false
+        } catch (failure: SecurityException) {
+            Log.w("NexaLinkOwner", "Socket $phase failed: ${failure.javaClass.simpleName}"); false
+        }
     }
 
     /** Protect first, then bind while unconnected. Caller owns and must close socket. */

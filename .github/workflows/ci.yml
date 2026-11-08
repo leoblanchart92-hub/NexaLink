@@ -139,7 +139,7 @@ jobs:
           api-level: 29
           arch: x86_64
           disable-animations: true
-          script: bash .github/scripts/android-phase7-test.sh && timeout 300 flutter test integration_test/engine_channel_test.dart -d emulator-5554
+          script: bash .github/scripts/android-phase7-and-flutter-test.sh
 
       - name: Test JNI Android 6 x86
         if: ${{ !cancelled() && steps.emulator_setup.outcome == 'success' }}

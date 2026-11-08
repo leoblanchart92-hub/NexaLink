@@ -3,6 +3,7 @@ package com.nexalink.app.network
 import android.content.Context
 import android.net.Network
 import android.net.VpnService
+import android.util.Log
 import mobile.Mobile
 import mobile.SocketBinder
 
@@ -23,7 +24,16 @@ internal class OwnerEngineAdapter(context: Context, vpn: VpnService, network: Ne
     }
 
     override fun start(privateKey: String, guestPublicKey: String, guestAddress: String, port: Int): Int =
-        engine.start(privateKey, guestPublicKey, guestAddress, port)
+        try { engine.start(privateKey, guestPublicKey, guestAddress, port) } catch (failure: Exception) {
+            // Only fixed, non-secret engine errors may be classified for diagnostics.
+            val known = setOf("invalid WireGuard key", "invalid private key", "peer key matches local key",
+                "private guest IPv4 required", "invalid port", "engine already running",
+                "could not start protected WireGuard endpoint", "invalid WireGuard configuration",
+                "could not read WireGuard state", "WireGuard port unavailable")
+            val reason = if (failure.message in known) failure.message else "unclassified"
+            Log.e("NexaLinkOwner", "Native start rejected: $reason")
+            throw failure
+        }
 
     fun statusJson(): String = engine.statusJSON()
     override fun stop() = engine.stop()

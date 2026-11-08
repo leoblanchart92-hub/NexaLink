@@ -78,7 +78,8 @@ class GuestVpnServiceInstrumentedTest {
                             val command = instrumentation.uiAutomation.executeShellCommand(
                                 "sh -c 'echo nexalink | nc -u -w 1 198.18.0.1 5555'"
                             )
-                            ParcelFileDescriptor.AutoCloseInputStream(command).use { it.readBytes() }
+                            val output = ParcelFileDescriptor.AutoCloseInputStream(command).use { String(it.readBytes()) }
+                            if (output.isNotBlank()) Log.i("NexaLinkVPN", "Probe command: $output")
                             try { socket.receive(packet); received = true }
                             catch (_: java.net.SocketTimeoutException) { }
                         }
