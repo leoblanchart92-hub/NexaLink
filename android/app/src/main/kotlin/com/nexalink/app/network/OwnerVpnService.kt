@@ -16,6 +16,9 @@ import android.os.ParcelFileDescriptor
 import android.system.OsConstants
 import android.util.Log
 import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /** Never passed in an Intent, persisted, logged, or exposed to Flutter.
  * There is intentionally no product caller until authenticated pairing and
@@ -54,6 +57,7 @@ class OwnerVpnService : VpnService() {
     private var tun: ParcelFileDescriptor? = null
     private var engine: OwnerEngineAdapter? = null
     private var callback: ConnectivityManager.NetworkCallback? = null
+    private var networkWait: CountDownLatch? = null
     private val manager by lazy { getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager }
     private val egress by lazy { CellularEgress(this) }
 
@@ -80,20 +84,38 @@ class OwnerVpnService : VpnService() {
         var phase = "network"
         try {
             if (isStopping()) return
-            val network = egress.validatedCellularNetwork() ?: throw IllegalStateException("No validated cellular network")
+            val selected = AtomicReference<Network?>(null)
+            val ready = CountDownLatch(1)
             phase = "watcher"
             val watcher = object : ConnectivityManager.NetworkCallback() {
-                override fun onLost(lost: Network) { if (lost == network) requestStop() }
+                override fun onLost(lost: Network) {
+                    if (selected.get() == lost) requestStop()
+                }
+                override fun onUnavailable() { ready.countDown() }
                 override fun onCapabilitiesChanged(changed: Network, caps: NetworkCapabilities) {
-                    if (changed == network && !egress.isUsable(network)) requestStop()
+                    val allowed = isAllowedCellular(
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+                    )
+                    if (allowed && selected.compareAndSet(null, changed)) ready.countDown()
+                    else if (selected.get() == changed && !allowed) requestStop()
                 }
             }
-            manager.registerNetworkCallback(NetworkRequest.Builder()
-                .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR).build(), watcher)
+            // A passive allNetworks result need not be accessible to this UID.
+            // Keep an explicit cellular request active until cleanup.
+            manager.requestNetwork(NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), watcher)
             synchronized(lock) {
                 if (stopping) { manager.unregisterNetworkCallback(watcher); return }
                 callback = watcher
+                networkWait = ready
             }
+            if (!ready.await(20, TimeUnit.SECONDS) || isStopping()) throw IllegalStateException("Cellular request ended")
+            val network = selected.get() ?: throw IllegalStateException("No validated cellular network")
             if (!egress.isUsable(network) || isStopping()) throw IllegalStateException("Cellular network changed")
             phase = "tun"
             val fd = Builder().setSession("NexaLink propriétaire — préparation")
@@ -139,6 +161,7 @@ class OwnerVpnService : VpnService() {
             OwnerServiceStateMonitor.state = OwnerServiceState.STOPPING
             oldTun = tun; tun = null
             oldCallback = callback; callback = null
+            networkWait?.countDown(); networkWait = null
         }
         try { oldTun?.close() } catch (_: Exception) { }
         if (oldCallback != null) try { manager.unregisterNetworkCallback(oldCallback) } catch (_: Exception) { }

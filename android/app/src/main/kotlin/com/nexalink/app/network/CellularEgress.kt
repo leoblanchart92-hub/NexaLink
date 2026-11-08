@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import android.system.ErrnoException
 import java.io.IOException
 import java.net.DatagramSocket
 import java.net.Socket
@@ -59,7 +60,8 @@ class CellularEgress(context: Context) {
             ParcelFileDescriptor.fromFd(fd).use { duplicate -> network.bindSocket(duplicate.fileDescriptor) }
             true
         } catch (failure: IOException) {
-            Log.w("NexaLinkOwner", "Socket $phase failed: ${failure.javaClass.simpleName}"); false
+            val errno = (failure.cause as? ErrnoException)?.errno
+            Log.w("NexaLinkOwner", "Socket $phase failed: ${failure.javaClass.simpleName}, errno=$errno"); false
         } catch (failure: SecurityException) {
             Log.w("NexaLinkOwner", "Socket $phase failed: ${failure.javaClass.simpleName}"); false
         }
