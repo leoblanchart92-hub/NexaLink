@@ -186,6 +186,9 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/android-arm-translated-test.sh
 
+      - name: Résumer séparément les tests Android
+        if: always()
+        run: python3 .github/scripts/android-test-summary.py
       - name: Conserver les journaux JNI et les résultats
         if: always()
         uses: actions/upload-artifact@v4

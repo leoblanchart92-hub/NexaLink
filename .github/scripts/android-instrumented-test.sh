@@ -47,10 +47,7 @@ for attempt in 1 2 3; do
     done
     break
   fi
-  echo "::notice title=INSTRUMENTED_SUITE_SUCCESS::${NEXALINK_DIAGNOSTIC_LABEL:-android-29-x86_64} attempt $attempt"
   adb logcat -d -v brief -s TestRunner:I | grep -E 'started:|finished:|ignored:|assumption' | tail -c 3600 > "${diagnostics}/tests-${attempt}.log"
-  if [ -s "${diagnostics}/tests-${attempt}.log" ]; then
-    echo "::notice title=INSTRUMENTED_SUCCESS_TESTS::$(base64 -w0 "${diagnostics}/tests-${attempt}.log")"
-  fi
 done
+printf '%s\n' "$status" > "${diagnostics}/exit-status.txt"
 exit "$status"
