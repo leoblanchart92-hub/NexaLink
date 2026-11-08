@@ -8,6 +8,7 @@ import android.net.ConnectivityManager
 import android.util.Log
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.wireguard.android.backend.Tunnel
@@ -66,6 +67,12 @@ class VpnServiceInstrumentedTest {
                 try {
                     val data = byteArrayOf(1, 2, 3)
                     probe.send(DatagramPacket(data, data.size, InetAddress.getByName("198.18.0.1"), 5555))
+                    // A second genuine IP sender uses Android's shell UID rather than
+                    // the VPN application's UID; some releases exempt the VPN app.
+                    val command = instrumentation.uiAutomation.executeShellCommand(
+                        "sh -c 'echo nexalink | nc -u -w 1 198.18.0.1 5555'"
+                    )
+                    ParcelFileDescriptor.AutoCloseInputStream(command).use { it.readBytes() }
                     val wire = ByteArray(2048)
                     val packet = DatagramPacket(wire, wire.size)
                     socket.receive(packet)
@@ -91,6 +98,55 @@ class VpnServiceInstrumentedTest {
             }
         } finally {
             try { guest.stop() } finally { socket.close(); appOp("ignore") }
+        }
+    }
+
+    private fun shell(command: String) {
+        val fd = instrumentation.uiAutomation.executeShellCommand(command)
+        ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes() }
+    }
+
+    private fun awaitState(expected: OwnerServiceState, timeoutMs: Long = 20000): Boolean {
+        val end = SystemClock.elapsedRealtime() + timeoutMs
+        while (SystemClock.elapsedRealtime() < end) {
+            if (OwnerServiceStateMonitor.state == expected) return true
+            Thread.sleep(100)
+        }
+        return false
+    }
+
+    @Test(timeout = 100000) fun ownerServiceStartsAndStopsOnActualCellularLossWhenAvailable() {
+        assumeTrue(Build.VERSION.SDK_INT >= 29)
+        val egress = CellularEgress(context)
+        assumeTrue("A validated cellular network is required for this test", egress.validatedCellularNetwork() != null)
+        val parameters = OwnerSessionParameters(
+            "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE=",
+            "YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI=", "10.77.0.2", 0,
+        )
+        val intent = Intent(context, OwnerVpnService::class.java)
+        try {
+            appOp("allow")
+            assertNull(VpnService.prepare(context))
+            assertTrue(OwnerSessionRequest.stage(parameters))
+            context.startService(intent)
+            assertTrue("owner should start on real validated cellular", awaitState(OwnerServiceState.RUNNING_LOCAL))
+            // Android emulator's actual network is toggled, not an injected callback.
+            shell("svc data disable")
+            assertTrue("owner should stop after cellular loss", awaitState(OwnerServiceState.STOPPED))
+            shell("svc data enable")
+            val end = SystemClock.elapsedRealtime() + 20000
+            while (egress.validatedCellularNetwork() == null && SystemClock.elapsedRealtime() < end) Thread.sleep(200)
+            assertNotNull("cellular should return before explicit restart", egress.validatedCellularNetwork())
+            assertTrue(OwnerSessionRequest.stage(parameters))
+            context.startService(intent)
+            assertTrue("a fresh service should start", awaitState(OwnerServiceState.RUNNING_LOCAL))
+            context.stopService(intent)
+            assertTrue("native cleanup must finish", awaitState(OwnerServiceState.STOPPED))
+        } finally {
+            shell("svc data enable")
+            context.stopService(intent)
+            OwnerSessionRequest.clear()
+            appOp("ignore")
         }
     }
 

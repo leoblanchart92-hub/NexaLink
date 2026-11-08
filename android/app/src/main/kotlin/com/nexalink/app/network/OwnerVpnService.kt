@@ -33,6 +33,11 @@ internal object OwnerSessionRequest {
     @Synchronized fun clear() { pending = null }
 }
 
+internal enum class OwnerServiceState { STOPPED, STARTING, RUNNING_LOCAL, STOPPING }
+internal object OwnerServiceStateMonitor {
+    @Volatile var state: OwnerServiceState = OwnerServiceState.STOPPED
+}
+
 /**
  * Owner VPN lifecycle. The Android TUN is only a control interface with no
  * Internet route. It is NOT the input to gVisor. WireGuard receives encrypted
@@ -54,6 +59,7 @@ class OwnerVpnService : VpnService() {
         synchronized(lock) {
             if (started || stopping) return START_NOT_STICKY
             started = true
+            OwnerServiceStateMonitor.state = OwnerServiceState.STARTING
         }
         val parameters = OwnerSessionRequest.take()
         if (parameters == null || prepare(this) != null || !VpnRoleLease.acquire(this)) {
@@ -102,7 +108,10 @@ class OwnerVpnService : VpnService() {
             }
             local.start(parameters.privateKey, parameters.guestPublicKey, parameters.guestAddress, parameters.port)
             // Protection/binding also checks this on every new socket. No fallback.
-            if (!egress.isUsable(network) || isStopping()) requestStop()
+            synchronized(lock) {
+                if (!stopping && egress.isUsable(network)) OwnerServiceStateMonitor.state = OwnerServiceState.RUNNING_LOCAL
+                else requestStop()
+            }
         } catch (_: Exception) { requestStop() }
     }
 
@@ -114,6 +123,7 @@ class OwnerVpnService : VpnService() {
         synchronized(lock) {
             if (stopping) return
             stopping = true
+            OwnerServiceStateMonitor.state = OwnerServiceState.STOPPING
             oldTun = tun; tun = null
             oldCallback = callback; callback = null
         }
@@ -125,7 +135,10 @@ class OwnerVpnService : VpnService() {
             try { engine?.stop(); closed = true } finally {
                 engine = null
                 // If cleanup fails, retain the lease rather than permit a competing VPN.
-                if (closed) VpnRoleLease.release(this)
+                if (closed) {
+                    VpnRoleLease.release(this)
+                    OwnerServiceStateMonitor.state = OwnerServiceState.STOPPED
+                }
                 stopForeground(true)
                 stopSelf()
                 worker.shutdown()
