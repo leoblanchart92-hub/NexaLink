@@ -190,9 +190,9 @@ La version actuelle de GoBackend protège les sockets invité mais ne contrôle 
 les retours de `protect` ; ce point exige une revue et des tests avant activation.
 
 Les essais automatisés invités utilisent un profil limité à une route de test,
-un récepteur UDP sur loopback et une autorisation accordée par app-op de
-l'émulateur. Ils ne valident ni le dialogue de consentement utilisateur, ni un
-handshake complet, ni un accès Internet. Les téléphones physiques, la perte
+un récepteur UDP sur loopback, un paquet de test et une autorisation accordée
+par app-op de l'émulateur. Ils ne valident ni le dialogue de consentement
+utilisateur, ni un handshake complet, ni un accès Internet. Les téléphones physiques, la perte
 cellulaire réelle, la sélection et protection des sockets propriétaires restent
 à tester. Aucune négociation authentifiée des clés ni révocation sécurisée avec
 effacement des clés ne sont implémentées ; le QR reste inchangé.
@@ -207,3 +207,39 @@ durant l'initialisation Go sous traduction ; une incompatibilité de traduction
 est plausible, mais les traces ne permettent pas d'exclure Go ou une autre cause.
 La pile ARM32 est insuffisante pour attribuer le `SIGSEGV` au traducteur,
 à gomobile ou au moteur. Aucun correctif ARM n'est déclaré.
+
+
+### Résultat des essais Phase 7
+
+Le run [42526327162](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42526327162)
+est **en échec global** : le test de routage invité n'a pas observé de façon
+fiable l'initiation WireGuard sur Android 10 et 15. Le TUN et la route ont été
+observés dans certains essais précédents, ainsi qu'une initiation sur loopback,
+mais les répétitions restent en échec ; la cause n'est pas établie.
+
+Dans ce même run, le backend, les tests Go et `-race` sur Linux x86_64 et ARM64
+natif, l'analyse et les tests Flutter, les tests unitaires Kotlin et la
+compilation APK ont réussi. Le diagnostic Flutter → Kotlin → Go (désormais dans
+un processus séparé) a réussi. Les tests du service propriétaire sur Android 10
+et 15 x86_64 ont réussi trois répétitions : interface Android, démarrage moteur
+local avec sockets protégées et liées au réseau cellulaire de l'émulateur,
+coupure des données, arrêt, retour du réseau et redémarrage explicite. Ces
+résultats ne valident ni réseau mobile physique ni transfert Internet. Les tests
+VPN des nouveaux services sont ignorés sur Android 6 ; les tests JNI de base y
+passent trois fois. Les journaux et un résumé de couverture sont conservés dans
+l'artefact de diagnostic du run.
+
+Dans le run [42517243752](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42517243752),
+Android 15 a aussi subi un `SIGSEGV` après chargement des deux bibliothèques Go
+et lors d'un essai propriétaire. La pile était insuffisante pour attribuer la
+cause à leur coexistence. Par précaution, un garde interdit désormais de charger
+les deux runtimes dans le même processus, même après arrêt d'un rôle ; le
+diagnostic Flutter est isolé dans un autre processus. Basculer entre rôles dans
+un même processus n'est donc pas encore pris en charge. Les essais propriétaire
+et invité sont lancés dans des processus d'instrumentation distincts ; ceci ne
+prouve pas la cause ni la résolution du plantage précédent.
+
+Aucun téléphone physique n'a été testé. Le service propriétaire est un
+prototype exécutable par les tests mais **n'est pas opérationnel comme service
+de partage** ; les interfaces, l'acheminement complet, les clés, la révocation,
+le relais et les tests de bout en bout restent bloquants.

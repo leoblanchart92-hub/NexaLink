@@ -6,7 +6,7 @@
 
 - Application Flutter Android : configuration d'un serveur HTTPS, création et lecture d'un QR d'invitation, demande explicite de l'invité, approbation/révocation par le propriétaire et consultation du statut d'association.
 - Serveur Node.js/SQLite : codes aléatoires à usage unique, expirant au bout de cinq minutes ; jetons aléatoires stockés sous forme de hachages ; accès séparés propriétaire/invité ; contrôle d'appartenance ; approbation explicite. Les identifiants de l'application sont stockés avec `flutter_secure_storage` et l'app refuse les URL HTTP et les redirections.
-- Préparation native : bibliothèque WireGuard Android, construction d'une configuration invitée, adaptateur de tunnel non exposé et primitives de sélection réseau cellulaire ; voir [l'étude technique et les limites](docs/architecture-reseau.md). Ces composants ne réalisent pas encore de partage.
+- Préparation native : bibliothèque WireGuard Android, adaptateur invité non exposé et service `VpnService` propriétaire expérimental, sans parcours produit de démarrage ; voir [l'étude technique et les limites](docs/architecture-reseau.md). Ces composants ne réalisent pas encore de partage.
 - Prototype Go : WireGuard, pile gVisor et flux TCP/UDP, testé en boucle locale sur CI. Un pont gomobile/Kotlin expérimental est compilé dans l'APK et expose seulement un diagnostic de chargement à Flutter ; le partage ne peut pas être démarré depuis l'interface. Le lien vers le réseau cellulaire réel n'est pas validé ; voir [gateway/README.md](gateway/README.md).
 - Tests automatisés du protocole d'association et workflow GitHub Actions pour construire un APK **de développement**, signé avec une clé debug. La présence du workflow ne prouve pas que la compilation ou l'installation fonctionne : vérifier son résultat.
 
@@ -14,7 +14,7 @@ L'association n'échange pas encore de clés WireGuard. Une approbation ou une r
 
 ## Récupérer l'APK de développement
 
-Dans GitHub, ouvrez **Actions**, choisissez « Tests et APK Android (développement) », puis une exécution réussie de cette branche. Téléchargez l'artifact **NexaLink-android-development-apk** (archive ZIP), extrayez-le et installez `app-release.apk` sur Android. Les artifacts expirent après 14 jours ; le bouton « Run workflow » peut relancer la compilation. L'APK n'est pas destiné à la publication, et des builds debug-signés par des machines différentes ne sont pas forcément compatibles pour la mise à jour. Cette procédure est conditionnée à la réussite du job Android.
+Dans GitHub, ouvrez **Actions**, choisissez « Tests et APK Android (développement) », puis une exécution réussie de cette branche. Téléchargez l'artifact **NexaLink-android-development-apk** (archive ZIP), extrayez-le et installez `app-release.apk` sur Android. Les artifacts expirent après 14 jours ; le bouton « Run workflow » peut relancer la compilation. L'APK n'est pas destiné à la publication, et des builds debug-signés par des machines différentes ne sont pas forcément compatibles pour la mise à jour. L'artefact peut être publié avant la fin du job : la compilation seule ne valide pas les tests Android, dont le résultat doit être vérifié séparément.
 
 ## Serveur d'association — développement uniquement
 
