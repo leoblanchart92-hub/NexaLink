@@ -67,7 +67,8 @@ class OwnerVpnServiceInstrumentedTest {
             assertNull(VpnService.prepare(context))
             assertTrue(OwnerSessionRequest.stage(parameters))
             context.startService(intent)
-            assertTrue("owner startup: ${OwnerServiceStateMonitor.failure}", awaitState(OwnerServiceState.RUNNING_LOCAL))
+            val started = awaitState(OwnerServiceState.RUNNING_LOCAL)
+            assertTrue("owner startup: ${OwnerServiceStateMonitor.failure}", started)
             assertFalse("guest Go runtime must not be loaded into the owner process", NativeRuntimeGuard.reserve(NativeRuntimeGuard.Kind.GUEST))
             // Android emulator's actual network is toggled, not an injected callback.
             shell("svc data disable")

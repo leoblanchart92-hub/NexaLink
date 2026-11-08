@@ -14,7 +14,7 @@ class EngineDiagnosticService : Service() {
     private val messenger = Messenger(Handler(Looper.getMainLooper()) { request ->
         if (request.what == 1) {
             val response = Message.obtain(null, 1)
-            response.obj = try { Mobile.runtimeVersion() } catch (_: Throwable) { null }
+            response.data.putString("version", try { Mobile.runtimeVersion() } catch (_: LinkageError) { null } catch (_: Exception) { null })
             try { request.replyTo?.send(response) } catch (_: Exception) { }
         }
         true

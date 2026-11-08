@@ -38,7 +38,7 @@ class MainActivity: FlutterActivity() {
             else result.success(version)
         }
         val replies = Messenger(Handler(Looper.getMainLooper()) { msg ->
-            finish(msg.obj as? String)
+            finish(msg.data.getString("version"))
             true
         })
         connection = object : ServiceConnection {

@@ -77,9 +77,11 @@ class OwnerVpnService : VpnService() {
     }
 
     private fun startOnWorker(parameters: OwnerSessionParameters) {
+        var phase = "network"
         try {
             if (isStopping()) return
             val network = egress.validatedCellularNetwork() ?: throw IllegalStateException("No validated cellular network")
+            phase = "watcher"
             val watcher = object : ConnectivityManager.NetworkCallback() {
                 override fun onLost(lost: Network) { if (lost == network) requestStop() }
                 override fun onCapabilitiesChanged(changed: Network, caps: NetworkCapabilities) {
@@ -93,6 +95,7 @@ class OwnerVpnService : VpnService() {
                 callback = watcher
             }
             if (!egress.isUsable(network) || isStopping()) throw IllegalStateException("Cellular network changed")
+            phase = "tun"
             val fd = Builder().setSession("NexaLink propriétaire — préparation")
                 .addAddress("10.254.254.1", 32)
                 // No default routes; do not blackhole unrelated address families.
@@ -104,11 +107,13 @@ class OwnerVpnService : VpnService() {
                 tun = fd
             }
             if (!egress.isUsable(network) || isStopping()) throw IllegalStateException("Cellular network changed")
+            phase = "native-create"
             val local = OwnerEngineAdapter(this, this, network)
             synchronized(lock) {
                 if (stopping) return
                 engine = local
             }
+            phase = "native-start"
             local.start(parameters.privateKey, parameters.guestPublicKey, parameters.guestAddress, parameters.port)
             // Protection/binding also checks this on every new socket. No fallback.
             synchronized(lock) {
@@ -117,8 +122,8 @@ class OwnerVpnService : VpnService() {
             }
         } catch (failure: Exception) {
             // Class only: native errors and input values may contain secrets.
-            OwnerServiceStateMonitor.failure = failure.javaClass.simpleName
-            Log.e("NexaLinkOwner", "Owner startup failed: ${failure.javaClass.simpleName}")
+            OwnerServiceStateMonitor.failure = "$phase:${failure.javaClass.simpleName}"
+            Log.e("NexaLinkOwner", "Owner startup failed at $phase: ${failure.javaClass.simpleName}")
             requestStop()
         }
     }
