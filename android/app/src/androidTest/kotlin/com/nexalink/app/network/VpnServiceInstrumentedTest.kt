@@ -4,6 +4,8 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
+import android.net.ConnectivityManager
+import android.util.Log
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -57,6 +59,9 @@ class VpnServiceInstrumentedTest {
         try {
             repeat(2) {
                 assertEquals(Tunnel.State.UP, guest.start(config))
+                val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                cm.allNetworks.forEach { Log.i("NexaLinkVPN", "network=${it} routes=${cm.getLinkProperties(it)?.routes}") }
+                Log.i("NexaLinkVPN", "Tunnel UP, cycle $it; sending routed probe")
                 val probe = DatagramSocket()
                 try {
                     val data = byteArrayOf(1, 2, 3)
@@ -64,6 +69,7 @@ class VpnServiceInstrumentedTest {
                     val wire = ByteArray(2048)
                     val packet = DatagramPacket(wire, wire.size)
                     socket.receive(packet)
+                    Log.i("NexaLinkVPN", "Received WireGuard datagram in cycle $it")
                     // WireGuard handshake initiation, not plaintext IP, is observed on loopback.
                     assertEquals(148, packet.length)
                     assertEquals(1, wire[0].toInt())

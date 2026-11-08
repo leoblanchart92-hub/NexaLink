@@ -128,6 +128,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Activer la virtualisation pour l'émulateur Android
+        id: emulator_setup
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -141,6 +142,7 @@ jobs:
           script: bash .github/scripts/android-instrumented-test.sh && timeout 300 flutter test integration_test/engine_channel_test.dart -d emulator-5554
 
       - name: Test JNI Android 6 x86
+        if: ${{ !cancelled() && steps.emulator_setup.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
         env:
           NEXALINK_DIAGNOSTIC_LABEL: android-23-x86
@@ -150,6 +152,7 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/android-instrumented-test.sh
       - name: Test JNI Android 15 x86_64
+        if: ${{ !cancelled() && steps.emulator_setup.outcome == 'success' }}
         id: baseline_android
         uses: reactivecircus/android-emulator-runner@v2
         env:

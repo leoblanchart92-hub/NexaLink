@@ -18,9 +18,14 @@ for attempt in 1 2 3; do
   adb logcat -d -v brief -s Go:* > "${diagnostics}/go-${attempt}.log" 2>&1
   cp -R ../build/app/outputs/androidTest-results/connected "${diagnostics}/results-${attempt}" 2>/dev/null
   if [ "$status" -ne 0 ]; then
-    rm -f /tmp/nexalink-{go,crash,selected}-part-*
+    rm -f /tmp/nexalink-{go,crash,selected,vpn}-part-*
     tail -c 1800 "${diagnostics}/gradle-${attempt}.log" | base64 -w0 | xargs -r -I{} echo "::notice title=INSTRUMENTED_FAILURE::{}"
     echo "::notice title=TEST_ABI::${NEXALINK_TEST_ABI:-host} ${NEXALINK_GO_ARCH:-host}"
+    adb logcat -d -v brief | grep -Ei 'NexaLinkVPN|WireGuard|VpnService|VpnJni' > "${diagnostics}/vpn-${attempt}.log"
+    head -c 7200 "${diagnostics}/vpn-${attempt}.log" | split -b 1800 - /tmp/nexalink-vpn-part-
+    for part in /tmp/nexalink-vpn-part-*; do
+      [ -s "$part" ] && echo "::notice title=INSTRUMENTED_VPN_${part##*-}::$(base64 -w0 "$part")"
+    done
     adb logcat -b crash -d -v brief > "${diagnostics}/crash-${attempt}.log" 2>&1
     adb logcat -d -v brief | grep -Ei 'NexaLinkABI|fatal|signal [0-9]|abort message|native.bridge|libgojni|nativeloader|debuggerd' | tail -c 9000 > "${diagnostics}/selected-${attempt}.log"
     head -c 7200 "${diagnostics}/crash-${attempt}.log" | split -b 1800 - /tmp/nexalink-crash-part-
