@@ -19,7 +19,9 @@ class GuestTunnel(context: Context) {
     private val backend = GoBackend(appContext)
     private val tunnel = object : Tunnel {
         override fun getName(): String = "nexalink"
-        override fun onStateChange(newState: Tunnel.State) { /* State is read from backend. */ }
+        override fun onStateChange(newState: Tunnel.State) {
+            if (newState == Tunnel.State.DOWN) VpnRoleLease.release(this@GuestTunnel)
+        }
     }
 
     fun prepareIntent(): Intent? = VpnService.prepare(appContext)
@@ -28,7 +30,15 @@ class GuestTunnel(context: Context) {
     fun start(config: Config): Tunnel.State {
         requireWorkerThread()
         check(VpnService.prepare(appContext) == null) { "VPN consent is required" }
-        return backend.setState(tunnel, Tunnel.State.UP, config)
+        check(VpnRoleLease.acquire(this)) { "Another NexaLink VPN role is active" }
+        return try {
+            backend.setState(tunnel, Tunnel.State.UP, config).also {
+                if (it != Tunnel.State.UP) VpnRoleLease.release(this)
+            }
+        } catch (failure: Exception) {
+            VpnRoleLease.release(this)
+            throw failure
+        }
     }
 
     @Synchronized

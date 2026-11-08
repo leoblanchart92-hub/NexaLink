@@ -37,8 +37,10 @@ class CellularEgress(context: Context) {
         caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
     )
 
+    internal fun isUsable(network: Network): Boolean = isAllowed(manager.getNetworkCapabilities(network))
+
     private fun checkNetwork(network: Network) {
-        if (!isAllowed(manager.getNetworkCapabilities(network))) throw IOException("Cellular network unavailable or unvalidated")
+        if (!isUsable(network)) throw IOException("Cellular network unavailable or unvalidated")
     }
 
     /**

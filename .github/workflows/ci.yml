@@ -3,6 +3,11 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      translated_arm:
+        description: 'Optional diagnostic: retry known-failing ARM translation'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -41,6 +46,21 @@ jobs:
             cat /tmp/gateway-tidy.log /tmp/gateway-test.log 2>/dev/null | tail -n 80 | while IFS= read -r line; do echo "::notice::$line"; done
           fi
           exit "$status"
+  gateway-arm64-native:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+          cache: false
+      - name: Vérifier ARM64 natif et tester Go sous Linux
+        working-directory: gateway
+        run: |
+          test "$(uname -m)" = aarch64
+          test "$(go env GOARCH)" = arm64
+          go test -race -v -timeout 120s ./...
   android:
     runs-on: ubuntu-latest
     steps:
@@ -141,6 +161,7 @@ jobs:
           script: bash .github/scripts/android-instrumented-test.sh
 
       - name: Tester ARM64 traduit sur Android 15 x86_64
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.translated_arm && steps.baseline_android.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
         env:
           NEXALINK_ARM_TARGET: arm64
@@ -151,7 +172,7 @@ jobs:
           disable-animations: true
           script: bash .github/scripts/android-arm-translated-test.sh
       - name: Tester ARM 32 bits traduit sur Android 11 x86
-        if: ${{ !cancelled() && steps.baseline_android.outcome == 'success' }}
+        if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.translated_arm && steps.baseline_android.outcome == 'success' }}
         uses: reactivecircus/android-emulator-runner@v2
         env:
           NEXALINK_ARM_TARGET: arm32

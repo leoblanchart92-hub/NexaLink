@@ -124,8 +124,9 @@ artificielle : il passe sur les émulateurs x86/x86_64 du run ci-dessous. Ces
 résultats ne prouvent pas le cycle réel d'un service Android, une perte réseau
 réelle ou l'absence de fuite.
 
-Aucun service propriétaire n'est enregistré ou démarré, et le contrôleur n'est
-pas relié aux commandes Flutter. L'invité conserve l'adaptateur `GuestTunnel`
+Le service propriétaire est enregistré mais n'est pas relié aux commandes
+Flutter et aucun parcours produit ne prépare sa session. Le contrôleur précédent
+reste distinct du cycle du nouveau service. L'invité conserve l'adaptateur `GuestTunnel`
 existant et le backend `GoBackend` de WireGuard : il faut encore obtenir le
 consentement Android, un profil authentifié, et valider son cycle de vie réel.
 Le QR n'a pas été modifié ; il ne doit jamais contenir de clé privée. L'échange
@@ -151,3 +152,58 @@ est globalement en échec sur les deux essais ARM ; les autres étapes, dont les
 JNI x86/x86_64, ont réussi. Les diagnostics sont conservés dans l'artefact du
 run. La cause des deux plantages reste à établir, et des tests sur CPU ARM
 physique sont indispensables.
+
+
+## Phase 7 — service Android expérimental
+
+`OwnerVpnService` est un vrai service Android non exporté, protégé par
+`BIND_VPN_SERVICE`, non persistant (`START_NOT_STICKY`), avec notification
+foreground et exclusion du mode always-on. Une session interne à usage unique
+reste sans appelant produit : la configuration ne passe ni dans une Intent ni
+par Flutter. Sans session, consentement VPN ou réseau cellulaire validé, il
+s'arrête. En cas de révocation, perte ou invalidation des capacités du réseau
+cellulaire, il ferme son interface, désinscrit son callback et met l'arrêt du
+moteur en file. Le verrou de rôle n'est libéré qu'après l'arrêt du moteur.
+Un callback natif bloqué peut encore retarder cet arrêt. Les clés sont des
+`String` en mémoire : l'effacement cryptographique n'est pas garanti.
+
+**Deux TUN différents, jamais deux VPN concurrents intentionnellement :**
+
+- Côté propriétaire, le service crée une interface Android de contrôle sans
+  route par défaut. Elle ne sert pas à alimenter gVisor et n'est pas un relais
+  de paquets Android. Les datagrammes WireGuard arrivent sur une socket UDP
+  protégée et liée au réseau cellulaire. Après authentification WireGuard, le
+  TUN **en mémoire** du moteur transmet les IP déchiffrées à gVisor ; les
+  réponses suivent le trajet inverse et sont rechiffrées par WireGuard.
+- Côté invité, le service `GoBackend.VpnService` de WireGuard crée et possède
+  le TUN Android et transmet son descripteur au moteur WireGuard du client.
+  Les paquets sélectionnés par les routes du profil partent chiffrés vers le
+  propriétaire ; les réponses déchiffrées retournent dans ce même TUN. Il ne
+  faut surtout pas connecter le TUN Android propriétaire directement à gVisor,
+  ce qui contournerait l'authentification de l'invité.
+
+Un verrou de rôle interne empêche les adaptateurs NexaLink propriétaire et
+invité d'établir intentionnellement deux VPN concurrents dans le même processus ;
+Android peut toujours révoquer la préparation si un autre VPN prend la main.
+Ce verrou ne remplace pas les garanties système ou une validation multi-processus.
+La version actuelle de GoBackend protège les sockets invité mais ne contrôle pas
+les retours de `protect` ; ce point exige une revue et des tests avant activation.
+
+Les essais automatisés invités utilisent un profil limité à une route de test,
+un récepteur UDP sur loopback et une autorisation accordée par app-op de
+l'émulateur. Ils ne valident ni le dialogue de consentement utilisateur, ni un
+handshake complet, ni un accès Internet. Les téléphones physiques, la perte
+cellulaire réelle, la sélection et protection des sockets propriétaires restent
+à tester. Aucune négociation authentifiée des clés ni révocation sécurisée avec
+effacement des clés ne sont implémentées ; le QR reste inchangé.
+
+La CI exécute aussi les tests Go sur un runner Linux ARM64 natif et vérifie
+`uname -m` et `GOARCH`. Ce résultat, s'il passe, ne valide pas l'AAR Android,
+JNI, ARM32 ni un téléphone ARM. Les essais de traduction Android connus en
+échec sont conservés en diagnostic optionnel, pas relancés par défaut ; les
+plantages historiques restent documentés ci-dessus. La pile ARM64 indique
+`internal/cpu.getMIDR.abi0`, une instruction de lecture d'identification CPU
+durant l'initialisation Go sous traduction ; une incompatibilité de traduction
+est plausible, mais les traces ne permettent pas d'exclure Go ou une autre cause.
+La pile ARM32 est insuffisante pour attribuer le `SIGSEGV` au traducteur,
+à gomobile ou au moteur. Aucun correctif ARM n'est déclaré.
