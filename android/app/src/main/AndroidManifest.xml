@@ -13,6 +13,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name=".EngineDiagnosticService" android:exported="false" android:process=":engine_diagnostics" />
         <service android:name=".network.OwnerVpnService" android:exported="false"
             android:permission="android.permission.BIND_VPN_SERVICE" android:foregroundServiceType="specialUse">
             <intent-filter><action android:name="android.net.VpnService" /></intent-filter>

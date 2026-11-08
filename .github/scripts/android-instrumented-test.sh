@@ -9,6 +9,11 @@ for attempt in 1 2 3; do
   echo "Android instrumentation attempt $attempt/3"
   adb logcat -c
   args=()
+  if [ -n "${NEXALINK_TEST_CLASS:-}" ]; then
+    args+=("-Pandroid.testInstrumentationRunnerArguments.class=${NEXALINK_TEST_CLASS}")
+  elif [ -n "${NEXALINK_TEST_EXCLUDE:-}" ]; then
+    args+=("-Pandroid.testInstrumentationRunnerArguments.notClass=${NEXALINK_TEST_EXCLUDE}")
+  fi
   if [ -n "${NEXALINK_TEST_ABI:-}" ]; then
     args+=("-PnexalinkTestAbi=${NEXALINK_TEST_ABI}" "-Pandroid.testInstrumentationRunnerArguments.expectedGoArch=${NEXALINK_GO_ARCH}")
   fi
@@ -21,7 +26,7 @@ for attempt in 1 2 3; do
     rm -f /tmp/nexalink-{go,crash,selected,vpn}-part-*
     tail -c 1800 "${diagnostics}/gradle-${attempt}.log" | base64 -w0 | xargs -r -I{} echo "::notice title=INSTRUMENTED_FAILURE::{}"
     echo "::notice title=TEST_ABI::${NEXALINK_TEST_ABI:-host} ${NEXALINK_GO_ARCH:-host}"
-    adb logcat -d -v brief | grep -Ei 'NexaLinkVPN|WireGuard|VpnService|VpnJni' > "${diagnostics}/vpn-${attempt}.log"
+    adb logcat -d -v brief | grep -Ei 'NexaLinkVPN|NexaLinkOwner|WireGuard|VpnService|VpnJni' > "${diagnostics}/vpn-${attempt}.log"
     head -c 7200 "${diagnostics}/vpn-${attempt}.log" | split -b 1800 - /tmp/nexalink-vpn-part-
     for part in /tmp/nexalink-vpn-part-*; do
       [ -s "$part" ] && echo "::notice title=INSTRUMENTED_VPN_${part##*-}::$(base64 -w0 "$part")"

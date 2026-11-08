@@ -16,7 +16,10 @@ import com.wireguard.config.Config
  */
 class GuestTunnel(context: Context) {
     private val appContext = context.applicationContext
-    private val backend = GoBackend(appContext)
+    private val backend = run {
+        check(NativeRuntimeGuard.reserve(NativeRuntimeGuard.Kind.GUEST)) { "A different Go runtime is already loaded" }
+        GoBackend(appContext)
+    }
     private val tunnel = object : Tunnel {
         override fun getName(): String = "nexalink"
         override fun onStateChange(newState: Tunnel.State) {

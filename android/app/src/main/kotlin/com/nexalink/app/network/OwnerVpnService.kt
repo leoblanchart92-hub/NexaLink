@@ -14,6 +14,7 @@ import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.system.OsConstants
+import android.util.Log
 import java.util.concurrent.Executors
 
 /** Never passed in an Intent, persisted, logged, or exposed to Flutter.
@@ -36,6 +37,7 @@ internal object OwnerSessionRequest {
 internal enum class OwnerServiceState { STOPPED, STARTING, RUNNING_LOCAL, STOPPING }
 internal object OwnerServiceStateMonitor {
     @Volatile var state: OwnerServiceState = OwnerServiceState.STOPPED
+    @Volatile var failure: String? = null
 }
 
 /**
@@ -59,6 +61,7 @@ class OwnerVpnService : VpnService() {
         synchronized(lock) {
             if (started || stopping) return START_NOT_STICKY
             started = true
+            OwnerServiceStateMonitor.failure = null
             OwnerServiceStateMonitor.state = OwnerServiceState.STARTING
         }
         val parameters = OwnerSessionRequest.take()
@@ -112,7 +115,12 @@ class OwnerVpnService : VpnService() {
                 if (!stopping && egress.isUsable(network)) OwnerServiceStateMonitor.state = OwnerServiceState.RUNNING_LOCAL
                 else requestStop()
             }
-        } catch (_: Exception) { requestStop() }
+        } catch (failure: Exception) {
+            // Class only: native errors and input values may contain secrets.
+            OwnerServiceStateMonitor.failure = failure.javaClass.simpleName
+            Log.e("NexaLinkOwner", "Owner startup failed: ${failure.javaClass.simpleName}")
+            requestStop()
+        }
     }
 
     private fun isStopping(): Boolean = synchronized(lock) { stopping }

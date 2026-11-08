@@ -139,7 +139,7 @@ jobs:
           api-level: 29
           arch: x86_64
           disable-animations: true
-          script: bash .github/scripts/android-instrumented-test.sh && timeout 300 flutter test integration_test/engine_channel_test.dart -d emulator-5554
+          script: bash .github/scripts/android-phase7-test.sh && timeout 300 flutter test integration_test/engine_channel_test.dart -d emulator-5554
 
       - name: Test JNI Android 6 x86
         if: ${{ !cancelled() && steps.emulator_setup.outcome == 'success' }}
@@ -150,7 +150,7 @@ jobs:
           api-level: 23
           arch: x86
           disable-animations: true
-          script: bash .github/scripts/android-instrumented-test.sh
+          script: bash .github/scripts/android-phase7-test.sh
       - name: Test JNI Android 15 x86_64
         if: ${{ !cancelled() && steps.emulator_setup.outcome == 'success' }}
         id: baseline_android
@@ -161,7 +161,7 @@ jobs:
           api-level: 35
           arch: x86_64
           disable-animations: true
-          script: bash .github/scripts/android-instrumented-test.sh
+          script: bash .github/scripts/android-phase7-test.sh
 
       - name: Tester ARM64 traduit sur Android 15 x86_64
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.translated_arm && steps.baseline_android.outcome == 'success' }}

@@ -17,7 +17,10 @@ internal class OwnerEngineAdapter(context: Context, vpn: VpnService, network: Ne
     private val binder = object : SocketBinder {
         override fun bindSocket(fd: Int): Boolean = egress.protectAndBindFd(network, vpn, fd)
     }
-    private val engine = Mobile.newEngine(binder)
+    private val engine = run {
+        check(NativeRuntimeGuard.reserve(NativeRuntimeGuard.Kind.OWNER)) { "A different Go runtime is already loaded" }
+        Mobile.newEngine(binder)
+    }
 
     override fun start(privateKey: String, guestPublicKey: String, guestAddress: String, port: Int): Int =
         engine.start(privateKey, guestPublicKey, guestAddress, port)
