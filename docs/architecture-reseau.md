@@ -362,3 +362,60 @@ puis a réussi dans les runs suivants : sa cause précédente reste inconnue.
 Aucun nouveau crash natif n'est rapporté dans ces séries, ce qui ne démontre
 pas l'absence générale de crash ou de fuite. Les essais ARM traduits n'ont pas
 été lancés. Les résultats ELF ARM n'établissent que l'empaquetage, pas l'exécution.
+
+## Phase 8.1 — instrumentation des cycles et état de validation
+
+La série instrumentée `GuestCycleInstrumentedTest` vise 100 cycles sans
+réessai : 50 sur un même objet invité puis 50 sur des objets neufs. Elle garde
+un enregistrement JSONL par cycle, y compris les échecs, et vérifie notamment
+l'UID de la sonde, l'écho, les octets et le handshake WireGuard côté invité,
+l'arrêt du service, la disparition du VPN et la libération du bail. Elle
+observe aussi les FD des sockets WireGuard, leur éventuelle fermeture, le nombre
+de FD et de threads et les compteurs d'interface quand ils sont accessibles.
+Ces compteurs noyau ne sont pas des compteurs de lecture du TUN par WireGuard.
+Le `SO_MARK`, s'il est lisible, est un indice uniquement : ni sa présence ni
+un bit particulier ne prouvent à eux seuls le succès de `VpnService.protect`.
+Le journal du pair de test complète les traces ; les données diagnostiques et
+les clés fixes de test ne sont pas des clés utilisateur. Une sonde liée au VPN
+après certains échecs est uniquement différentielle, jamais un réessai de
+succès. En cas d'arrêt ou d'appel natif d'état incertain, la série s'interrompt
+sans démarrer un autre VPN : cela constitue un échec, pas 100 cycles réussis.
+Le scénario séparé de perte/retour réseau peut lui aussi échouer ou être bloqué
+par un nettoyage incertain.
+
+Résultats confirmés, **pas une validation des 100 cycles** :
+
+* [42600344830](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42600344830)
+  teste `bcfc9e1` : les séries Android 10 et 15 expirent ; backend, Go Linux
+  x86_64/ARM64 natif, Flutter, Kotlin, APK et Android 6 de base réussissent.
+  [APK de développement](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42600344830/artifacts/13666235601),
+  [diagnostics](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42600344830/artifacts/13670057168).
+* [42606341576](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42606341576)
+  (`a868c89`), [42611116194](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42611116194)
+  (`e9135d4`) et [42611142575](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42611142575)
+  (`5799b3d`) échouent également. Dans les deux derniers, Android 10 reste au
+  cycle 0, après le jalon `inspect` ; le run `e9135d4` montre une expiration
+  JUnit dans `libcore.io.Linux.readBytes`. La lecture du pipe de commande shell
+  utilisé pour les compteurs est suspectée, sans que cela explique la perte
+  intermittente du trafic VPN. Le scénario réseau suivant signale aussi que
+  l'ancien VPN n'a pas disparu. Les séries 100/100 ne sont donc pas acquises.
+* `44ac205` remplace cette lecture de compteur par une lecture sysfs bornée et
+  corrige le repli d'extraction JSONL lorsque `run-as` renvoie une erreur sur
+  stdout. `a297093` exige exactement les 100 identifiants de cycle et
+  `5a759e4` limite les annotations tout en conservant les logs complets dans
+  l'artifact. Les runs correspondants
+  [42707384205](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42707384205),
+  [42712900355](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42712900355)
+  et [42713526877](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42713526877)
+  n'étaient pas terminés lors de cette rédaction ; les étapes Android 10 des
+  deux premiers ont déjà échoué. Aucun décompte final ne peut en être déduit.
+* `dce13da` borne les étapes émulateur et supprime le pipe `tee` susceptible de
+  rester ouvert après timeout ; `d1dfead` ajuste ces limites pour laisser leur
+  budget aux suites. Les runs [42713608334](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42713608334)
+  et [42714183218](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42714183218)
+  sont en cours au moment de la rédaction. Les changements de diagnostic et de
+  CI ne constituent pas un correctif démontré de la perte VPN.
+
+Le SIGSEGV historique et les limites de la section précédente restent ouverts.
+Aucun essai sur Android ARM natif ou téléphone physique et aucun partage
+Internet réel ne sont démontrés par ces séries x86_64.
