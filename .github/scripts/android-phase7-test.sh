@@ -34,7 +34,7 @@ done
 # Run the 100-cycle test once on supported x86_64 emulators, preserving every failure.
 if [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -ge 29 ]; then
   NEXALINK_DIAGNOSTIC_LABEL="${base}-cycles" NEXALINK_TEST_CLASS='com.nexalink.app.network.GuestCycleInstrumentedTest' \
-  NEXALINK_ATTEMPTS=1 NEXALINK_TEST_TIMEOUT=3900 NEXALINK_CYCLE_TEST=1 \
+  NEXALINK_ATTEMPTS=1 NEXALINK_TEST_TIMEOUT=3300 NEXALINK_CYCLE_TEST=1 \
     bash .github/scripts/android-instrumented-test.sh || status=1
 fi
 exit "$status"

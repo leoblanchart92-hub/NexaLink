@@ -36,6 +36,8 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeoutException
 
 /** Real network test, never part of a release APK. No success retry. */
 @RunWith(AndroidJUnit4::class)
@@ -132,6 +134,17 @@ class GuestCycleInstrumentedTest {
         put("error", b.getString("error", "none"))
     }
 
+    // A stuck native call makes the process unsafe to reuse. Bound the wait,
+    // record the failure and stop the series rather than starting a second VPN.
+    private fun <T> lifecycleCall(action: () -> T): T {
+        val pool = Executors.newSingleThreadExecutor { task -> Thread(task, "vpn-cycle-operation").apply { isDaemon = true } }
+        return try { pool.submit<T> { action() }.get(15, TimeUnit.SECONDS) }
+        finally { pool.shutdownNow() }
+    }
+    private fun checkpoint(cycle: Int, stage: String) {
+        android.util.Log.i("NexaLinkCycle", "CHECK cycle=$cycle stage=$stage elapsedMs=${SystemClock.elapsedRealtime()}")
+    }
+
     private fun physicalInternetAvailable(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         return cm.allNetworks.any { network ->
@@ -187,7 +200,7 @@ class GuestCycleInstrumentedTest {
         }
     }
 
-    @Test(timeout = 3600000) fun oneHundredRealGuestCycles() {
+    @Test(timeout = 3000000) fun oneHundredRealGuestCycles() {
         assumeTrue(Build.VERSION.SDK_INT >= 29)
         shell("appops set ${context.packageName} ACTIVATE_VPN allow")
         assertNull("emulator VPN authorization", VpnService.prepare(context))
@@ -213,26 +226,33 @@ class GuestCycleInstrumentedTest {
                 val errors = mutableListOf<String>()
                 var started = false
                 var sockets: JSONObject? = null
+                var lifecycleUncertain = false
+                checkpoint(cycle, "begin")
                 try {
                     val before = probe(cycle, stopped = true)
                     row.put("before", recordProbe(before))
                     if (!before.getBoolean("vpnGone") || before.getInt("uid", -1) == Process.myUid()) errors.add("prior-vpn-not-gone-or-uid")
                     if (errors.isEmpty()) {
-                        if (guest.start(config) != Tunnel.State.UP) errors.add("start-not-up") else started = true
+                        checkpoint(cycle, "starting")
+                        if (lifecycleCall { guest.start(config) } != Tunnel.State.UP) errors.add("start-not-up") else started = true
+                        checkpoint(cycle, "started")
                     }
                     row.put("serviceAfterStart", serviceRunning())
                     if (started) {
                         sockets = wireGuardSockets(guest)
                         row.put("wireSocketsBefore", sockets)
+                        checkpoint(cycle, "inspect")
                         val inspected = probe(cycle, inspect = true)
                         row.put("inspect", recordProbe(inspected))
                         val iface = inspected.getString("interfaceName")
                         row.put("tunBefore", tunCounters(iface))
+                        checkpoint(cycle, "probe")
                         val result = probe(cycle)
+                        checkpoint(cycle, "probed")
                         row.put("probe", recordProbe(result))
                         row.put("tunAfter", tunCounters(iface))
                         row.put("wireSocketsAfter", wireGuardSockets(guest))
-                        val stats = guest.statistics()
+                        val stats = lifecycleCall { guest.statistics() }
                         val peer = stats.peer(ownerKey.publicKey)
                         row.put("wgTxBytes", stats.totalTx()).put("wgRxBytes", stats.totalRx())
                             .put("handshakeMillis", peer?.latestHandshakeEpochMillis() ?: 0L)
@@ -244,13 +264,20 @@ class GuestCycleInstrumentedTest {
                         // Differential probe is diagnostic only: it cannot turn a failed cycle into success.
                         if (errors.isNotEmpty() && failures < 10) row.put("boundDiagnostic", recordProbe(probe(cycle, bound = true)))
                     }
+                } catch (e: TimeoutException) {
+                    errors.add("lifecycle-timeout")
+                    lifecycleUncertain = true
+                    blocked = true
                 } catch (e: Exception) {
                     errors.add("exception:${e.javaClass.simpleName}")
                 } catch (e: AssertionError) {
                     errors.add("assertion:${e.javaClass.simpleName}")
                 } finally {
                     try {
-                        val state = guest.stop()
+                        if (lifecycleUncertain) throw IllegalStateException("lifecycle still uncertain")
+                        checkpoint(cycle, "stopping")
+                        val state = lifecycleCall { guest.stop() }
+                        checkpoint(cycle, "stopped")
                         row.put("stopState", state.toString()).put("serviceAfterStop", serviceRunning())
                         sockets?.let {
                             val closed = socketsClosed(it)
@@ -271,7 +298,7 @@ class GuestCycleInstrumentedTest {
                     out.appendText(row.toString() + "\n")
                     completed++
                     if (errors.isNotEmpty()) failures++
-                    android.util.Log.i("NexaLinkCycle", "cycle=$cycle result=${if (errors.isEmpty()) "pass" else errors.joinToString(",")}")
+                    android.util.Log.i("NexaLinkCycle", "RECORD=${row}")
                 }
                 if (blocked) break // fail closed: never overlap another VPN when cleanup is uncertain
             }

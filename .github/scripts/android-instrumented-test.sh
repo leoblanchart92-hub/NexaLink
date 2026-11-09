@@ -8,6 +8,7 @@ status=0
 for ((attempt=1; attempt<=${NEXALINK_ATTEMPTS:-3}; attempt++)); do
   echo "Android instrumentation attempt $attempt/${NEXALINK_ATTEMPTS:-3}"
   adb logcat -c
+  if [ "${NEXALINK_CYCLE_TEST:-0}" = 1 ]; then adb logcat -G 16M 2>/dev/null || true; fi
   args=()
   if [ -n "${NEXALINK_TEST_CLASS:-}" ]; then
     args+=("-Pandroid.testInstrumentationRunnerArguments.class=${NEXALINK_TEST_CLASS}")
@@ -21,6 +22,14 @@ for ((attempt=1; attempt<=${NEXALINK_ATTEMPTS:-3}; attempt++)); do
   status=${PIPESTATUS[0]}
   if [ "${NEXALINK_CYCLE_TEST:-0}" = 1 ]; then
     adb exec-out run-as com.nexalink.app cat files/phase81-cycles.jsonl > "${diagnostics}/cycles.jsonl" 2> "${diagnostics}/cycles-pull.err"
+    adb logcat -d -v raw -s NexaLinkCycle:I '*:S' > "${diagnostics}/cycles-logcat.log" 2>&1
+    if [ ! -s "${diagnostics}/cycles.jsonl" ]; then
+      sed -n 's/^RECORD=//p' "${diagnostics}/cycles-logcat.log" > "${diagnostics}/cycles.jsonl"
+    fi
+    echo "::notice title=PHASE81_CHECKPOINT_${NEXALINK_DIAGNOSTIC_LABEL}::$(tail -c 1800 "${diagnostics}/cycles-logcat.log" | base64 -w0)"
+    if [ -s "${diagnostics}/cycles-pull.err" ]; then
+      echo "::notice title=PHASE81_PULL_${NEXALINK_DIAGNOSTIC_LABEL}::$(tail -c 500 "${diagnostics}/cycles-pull.err" | base64 -w0)"
+    fi
     python3 ../.github/scripts/summarize-cycles.py "${diagnostics}/cycles.jsonl" "${NEXALINK_DIAGNOSTIC_LABEL}"
   fi
   adb logcat -d -v threadtime > "${diagnostics}/logcat-${attempt}.log" 2>&1
