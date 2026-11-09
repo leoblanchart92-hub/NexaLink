@@ -175,7 +175,10 @@ class GuestVpnServiceInstrumentedTest {
             repeat(2) { cycle ->
                 assertEquals(Tunnel.State.UP, guest.start(config))
                 awaitVpnRoute()
-                sendProbeFromTestUid(expectEcho = true)
+                try { sendProbeFromTestUid(expectEcho = true) } finally {
+                    val diagnostic = guest.statistics()
+                    Log.i("NexaLinkVPN", "Guest WG byte totals tx=${diagnostic.totalTx()} rx=${diagnostic.totalRx()}")
+                }
                 val stats = guest.statistics()
                 assertTrue("WireGuard transmitted bytes in cycle $cycle", stats.totalTx() > 0)
                 assertTrue("WireGuard received bytes in cycle $cycle", stats.totalRx() > 0)

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Record static native ABI/build metadata, not runtime data or keys."""
+import base64
 from pathlib import Path
 import subprocess
 import tempfile
@@ -32,3 +33,4 @@ with zipfile.ZipFile(apk) as archive, tempfile.TemporaryDirectory() as tmp:
         lines.append(f'shared defined dynamic symbols ({len(shared)}): {", ".join(shared)}')
 out.write_text('\n'.join(lines) + '\n')
 print(f'Native ABI/build metadata recorded in {out}; no execution is implied.')
+print('::notice title=NATIVE_ABI_METADATA::' + base64.b64encode(out.read_bytes()).decode())

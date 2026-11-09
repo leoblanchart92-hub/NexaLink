@@ -36,6 +36,7 @@ func (b *loopbackBind) Open(port uint16) ([]conn.ReceiveFunc, uint16, error) {
     b.socket = c
     receive := func(packets [][]byte, sizes []int, eps []conn.Endpoint) (int, error) {
         n, addr, err := c.ReadFromUDPAddrPort(packets[0]); if err != nil { return 0, err }
+        if n > 0 { log.Printf("peer wire rx type=%d bytes=%d", packets[0][0], n) }
         sizes[0] = n; eps[0] = &endpoint{addr}; return 1, nil
     }
     return []conn.ReceiveFunc{receive}, uint16(c.LocalAddr().(*net.UDPAddr).Port), nil
@@ -50,7 +51,10 @@ func (b *loopbackBind) Send(bufs [][]byte, ep conn.Endpoint) error {
     e, ok := ep.(*endpoint); if !ok || !e.addr.Addr().IsLoopback() { return conn.ErrWrongEndpointType }
     b.mu.Lock(); defer b.mu.Unlock()
     if b.socket == nil { return net.ErrClosed }
-    for _, p := range bufs { if _, err := b.socket.WriteToUDPAddrPort(p, e.addr); err != nil { return err } }
+    for _, p := range bufs {
+        if _, err := b.socket.WriteToUDPAddrPort(p, e.addr); err != nil { return err }
+        if len(p) > 0 { log.Printf("peer wire tx type=%d bytes=%d", p[0], len(p)) }
+    }
     return nil
 }
 func (*loopbackBind) ParseEndpoint(s string) (conn.Endpoint, error) {
@@ -73,6 +77,7 @@ func main() {
     buf := make([]byte, 2048)
     for {
         n, addr, err := echo.ReadFrom(buf); if err != nil { fmt.Fprintln(os.Stderr, "echo stopped"); return }
-        if _, err = echo.WriteTo(buf[:n], addr); err != nil { log.Print("echo write failed: ", err) }
+        log.Printf("peer decrypted UDP packets=1 bytes=%d", n)
+        if _, err = echo.WriteTo(buf[:n], addr); err != nil { log.Print("echo write failed: ", err) } else { log.Print("peer echo sent packets=1") }
     }
 }

@@ -22,12 +22,13 @@ for attempt in 1 2 3; do
   adb logcat -d -v threadtime > "${diagnostics}/logcat-${attempt}.log" 2>&1
   adb logcat -d -v brief -s Go:* > "${diagnostics}/go-${attempt}.log" 2>&1
   cp -R ../build/app/outputs/androidTest-results/connected "${diagnostics}/results-${attempt}" 2>/dev/null
+  adb logcat -d -v brief -s TestRunner:I | grep -E 'started:|finished:|ignored:|assumption' > "${diagnostics}/tests-${attempt}.log"
   if [ "$status" -ne 0 ]; then
     rm -f /tmp/nexalink-{go,crash,selected,vpn}-part-*
     tail -c 1800 "${diagnostics}/gradle-${attempt}.log" | base64 -w0 | xargs -r -I{} echo "::notice title=INSTRUMENTED_FAILURE::{}"
     echo "::notice title=TEST_ABI::${NEXALINK_TEST_ABI:-host} ${NEXALINK_GO_ARCH:-host}"
     adb logcat -d -v brief | grep -Ei 'NexaLinkVPN|NexaLinkOwner|WireGuard|VpnService|VpnJni' > "${diagnostics}/vpn-${attempt}.log"
-    head -c 7200 "${diagnostics}/vpn-${attempt}.log" | split -b 1800 - /tmp/nexalink-vpn-part-
+    tail -c 7200 "${diagnostics}/vpn-${attempt}.log" | split -b 1800 - /tmp/nexalink-vpn-part-
     for part in /tmp/nexalink-vpn-part-*; do
       [ -s "$part" ] && echo "::notice title=INSTRUMENTED_VPN_${part##*-}::$(base64 -w0 "$part")"
     done
@@ -47,7 +48,6 @@ for attempt in 1 2 3; do
     done
     break
   fi
-  adb logcat -d -v brief -s TestRunner:I | grep -E 'started:|finished:|ignored:|assumption' | tail -c 3600 > "${diagnostics}/tests-${attempt}.log"
 done
 printf '%s\n' "$status" > "${diagnostics}/exit-status.txt"
 exit "$status"
