@@ -6,6 +6,7 @@ import android.net.VpnService
 import android.os.Looper
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
+import com.wireguard.android.backend.Statistics
 import com.wireguard.config.Config
 
 /**
@@ -52,6 +53,10 @@ class GuestTunnel(context: Context) {
 
     @Synchronized
     fun state(): Tunnel.State = backend.getState(tunnel)
+
+    // Local encrypted byte totals only; neither a handshake nor Internet proof.
+    @Synchronized
+    internal fun statistics(): Statistics = backend.getStatistics(tunnel)
 
     private fun requireWorkerThread() {
         check(Looper.myLooper() != Looper.getMainLooper()) { "Use a background thread" }

@@ -46,26 +46,29 @@ class GuestVpnServiceInstrumentedTest {
         ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
     }
 
-    private fun sendProbeFromTestUid() {
+    private fun sendProbeFromTestUid(expectEcho: Boolean = false) {
         val done = CountDownLatch(1)
         var uid = -1
         var sent = false
         var error: String? = null
+        var echo = false
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 val extras = getResultExtras(false)
                 uid = extras?.getInt("uid", -1) ?: -1
                 sent = extras?.getBoolean("sent", false) ?: false
                 error = extras?.getString("error")
+                echo = extras?.getBoolean("echo", false) ?: false
                 done.countDown()
             }
         }
         context.sendOrderedBroadcast(Intent().setClassName(
             instrumentation.context.packageName, "com.nexalink.app.network.VpnProbeReceiver",
-        ), null, receiver, Handler(Looper.getMainLooper()), 0, null, null)
-        assertTrue("test APK probe receiver must complete", done.await(5, TimeUnit.SECONDS))
+        ).putExtra("expectEcho", expectEcho), null, receiver, Handler(Looper.getMainLooper()), 0, null, null)
+        assertTrue("test APK probe receiver must complete", done.await(12, TimeUnit.SECONDS))
         assertTrue("probe must execute under a distinct test APK UID", uid >= 0 && uid != Process.myUid())
         assertTrue("test APK UDP send failed: $error", sent)
+        if (expectEcho) assertTrue("routed UDP echo must return through WireGuard and the Android TUN: $error", echo)
     }
 
     private fun awaitVpnRoute() {
@@ -148,6 +151,40 @@ class GuestVpnServiceInstrumentedTest {
             }
         } finally {
             try { guest.stop() } finally { socket.close(); appOp("ignore") }
+        }
+    }
+
+    /** A real second WireGuard endpoint runs on the CI host, loopback-only.
+     * The test APK is an ordinary separate UID and checks the returned bytes.
+     * 0/0 deliberately includes the endpoint: GoBackend must protect its sockets.
+     */
+    @Test(timeout = 90000) fun guestTunRoundTripsThroughRealWireGuardPeer() {
+        assumeTrue(Build.VERSION.SDK_INT >= 29)
+        appOp("allow")
+        val guest = GuestTunnel(context)
+        val guestKey = KeyPair(Key.fromBase64("YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="))
+        val ownerKey = KeyPair(Key.fromBase64("YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="))
+        val config = Config.Builder()
+            .setInterface(Interface.Builder().setKeyPair(guestKey)
+                .addAddress(InetNetwork.parse("10.77.0.2/32")).setMtu(1280).build())
+            .addPeer(Peer.Builder().setPublicKey(ownerKey.publicKey)
+                .setEndpoint(InetEndpoint.parse("10.0.2.2:38673"))
+                .addAllowedIp(InetNetwork.parse("0.0.0.0/0")).build())
+            .build()
+        try {
+            repeat(2) { cycle ->
+                assertEquals(Tunnel.State.UP, guest.start(config))
+                awaitVpnRoute()
+                sendProbeFromTestUid(expectEcho = true)
+                val stats = guest.statistics()
+                assertTrue("WireGuard transmitted bytes in cycle $cycle", stats.totalTx() > 0)
+                assertTrue("WireGuard received bytes in cycle $cycle", stats.totalRx() > 0)
+                Log.i("NexaLinkVPN", "Bidirectional test succeeded in cycle $cycle")
+                assertEquals(Tunnel.State.DOWN, guest.stop())
+                assertEquals(Tunnel.State.DOWN, guest.state())
+            }
+        } finally {
+            try { guest.stop() } finally { appOp("ignore") }
         }
     }
 

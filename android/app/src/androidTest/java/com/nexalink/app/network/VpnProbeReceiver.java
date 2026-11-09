@@ -22,6 +22,16 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                 socket.send(new DatagramPacket(bytes, bytes.length,
                         InetAddress.getByName("198.18.0.1"), 5555));
                 result.putBoolean("sent", true);
+                if (intent.getBooleanExtra("expectEcho", false)) {
+                    socket.setSoTimeout(8000);
+                    byte[] reply = new byte[128];
+                    DatagramPacket response = new DatagramPacket(reply, reply.length);
+                    socket.receive(response);
+                    result.putBoolean("echo", response.getLength() == 3 &&
+                            reply[0] == 1 && reply[1] == 2 && reply[2] == 3 &&
+                            response.getAddress().equals(InetAddress.getByName("198.18.0.1")) &&
+                            response.getPort() == 5555);
+                }
                 Log.i("NexaLinkVPN", "Test APK UID sent routed UDP probe");
             } catch (Exception failure) {
                 result.putString("error", failure.getClass().getSimpleName());
