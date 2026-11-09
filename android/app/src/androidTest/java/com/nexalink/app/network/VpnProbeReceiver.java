@@ -24,6 +24,19 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
             Bundle result = new Bundle();
             result.putInt("uid", Process.myUid());
             try {
+                if (intent.getBooleanExtra("expectStopped", false)) {
+                    ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                    long deadline = SystemClock.elapsedRealtime() + 4000;
+                    boolean gone = false;
+                    do {
+                        Network active = cm.getActiveNetwork();
+                        NetworkCapabilities caps = active == null ? null : cm.getNetworkCapabilities(active);
+                        if (caps == null || !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) { gone = true; break; }
+                        Thread.sleep(50);
+                    } while (SystemClock.elapsedRealtime() < deadline);
+                    result.putBoolean("vpnGone", gone);
+                    return;
+                }
                 if (intent.getBooleanExtra("expectEcho", false)) {
                     ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
                     long deadline = SystemClock.elapsedRealtime() + 4000;

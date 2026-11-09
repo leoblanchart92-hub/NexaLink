@@ -46,12 +46,13 @@ class GuestVpnServiceInstrumentedTest {
         ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
     }
 
-    private fun sendProbeFromTestUid(expectEcho: Boolean = false) {
+    private fun sendProbeFromTestUid(expectEcho: Boolean = false, expectStopped: Boolean = false) {
         val done = CountDownLatch(1)
         var uid = -1
         var sent = false
         var error: String? = null
         var echo = false
+        var vpnGone = false
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 val extras = getResultExtras(false)
@@ -59,14 +60,19 @@ class GuestVpnServiceInstrumentedTest {
                 sent = extras?.getBoolean("sent", false) ?: false
                 error = extras?.getString("error")
                 echo = extras?.getBoolean("echo", false) ?: false
+                vpnGone = extras?.getBoolean("vpnGone", false) ?: false
                 done.countDown()
             }
         }
         context.sendOrderedBroadcast(Intent().setClassName(
             instrumentation.context.packageName, "com.nexalink.app.network.VpnProbeReceiver",
-        ).putExtra("expectEcho", expectEcho), null, receiver, Handler(Looper.getMainLooper()), 0, null, null)
+        ).putExtra("expectEcho", expectEcho).putExtra("expectStopped", expectStopped), null, receiver, Handler(Looper.getMainLooper()), 0, null, null)
         assertTrue("test APK probe receiver must complete", done.await(12, TimeUnit.SECONDS))
         assertTrue("probe must execute under a distinct test APK UID", uid >= 0 && uid != Process.myUid())
+        if (expectStopped) {
+            assertTrue("old VPN network must disappear for the test UID: $error", vpnGone)
+            return
+        }
         assertTrue("test APK UDP send failed: $error", sent)
         if (expectEcho) assertTrue("routed UDP echo must return through WireGuard and the Android TUN: $error", echo)
     }
@@ -113,10 +119,7 @@ class GuestVpnServiceInstrumentedTest {
                 cm.allNetworks.forEach { Log.i("NexaLinkVPN", "network=${it} routes=${cm.getLinkProperties(it)?.routes}") }
                 awaitVpnRoute()
                 Log.i("NexaLinkVPN", "Tunnel UP, cycle $it; sending routed probe")
-                val probe = DatagramSocket()
-                try {
-                    val data = byteArrayOf(1, 2, 3)
-                    probe.send(DatagramPacket(data, data.size, InetAddress.getByName("198.18.0.1"), 5555))
+                run {
                     // Only the distinct test APK UID proves an ordinary application route.
                     val wire = ByteArray(2048)
                     val packet = DatagramPacket(wire, wire.size)
@@ -133,7 +136,7 @@ class GuestVpnServiceInstrumentedTest {
                     // WireGuard handshake initiation, not plaintext IP, is observed on loopback.
                     assertEquals(148, packet.length)
                     assertEquals(1, wire[0].toInt())
-                } finally { probe.close() }
+                }
                 assertEquals(Tunnel.State.DOWN, guest.stop())
                 assertEquals(Tunnel.State.DOWN, guest.state())
                 // Wait for the WireGuard service to finish destruction before restart.
@@ -148,6 +151,7 @@ class GuestVpnServiceInstrumentedTest {
                     Thread.sleep(100)
                 }
                 assertTrue("WireGuard service must stop before restart", serviceGone)
+                sendProbeFromTestUid(expectStopped = true)
             }
         } finally {
             try { guest.stop() } finally { socket.close(); appOp("ignore") }
@@ -161,6 +165,7 @@ class GuestVpnServiceInstrumentedTest {
     @Test(timeout = 90000) fun guestTunRoundTripsThroughRealWireGuardPeer() {
         assumeTrue(Build.VERSION.SDK_INT >= 29)
         appOp("allow")
+        sendProbeFromTestUid(expectStopped = true)
         val guest = GuestTunnel(context)
         val guestKey = KeyPair(Key.fromBase64("YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="))
         val ownerKey = KeyPair(Key.fromBase64("YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="))
@@ -185,6 +190,7 @@ class GuestVpnServiceInstrumentedTest {
                 Log.i("NexaLinkVPN", "Bidirectional test succeeded in cycle $cycle")
                 assertEquals(Tunnel.State.DOWN, guest.stop())
                 assertEquals(Tunnel.State.DOWN, guest.state())
+                sendProbeFromTestUid(expectStopped = true)
             }
         } finally {
             try { guest.stop() } finally { appOp("ignore") }
