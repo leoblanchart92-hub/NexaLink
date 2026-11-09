@@ -1,12 +1,17 @@
 package com.nexalink.app.network
 
 import android.app.ActivityManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -26,6 +31,8 @@ import org.junit.runner.RunWith
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Uses real Android VPN and WireGuard on an isolated emulator, not Internet sharing. */
 @RunWith(AndroidJUnit4::class)
@@ -37,6 +44,44 @@ class GuestVpnServiceInstrumentedTest {
         // Emulator-only test authorization; not a test of the consent dialog.
         val descriptor = instrumentation.uiAutomation.executeShellCommand("appops set ${context.packageName} ACTIVATE_VPN $mode")
         ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
+    }
+
+    private fun sendProbeFromTestUid() {
+        val done = CountDownLatch(1)
+        var uid = -1
+        var sent = false
+        var error: String? = null
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                val extras = getResultExtras(false)
+                uid = extras?.getInt("uid", -1) ?: -1
+                sent = extras?.getBoolean("sent", false) ?: false
+                error = extras?.getString("error")
+                done.countDown()
+            }
+        }
+        context.sendOrderedBroadcast(Intent().setClassName(
+            instrumentation.context.packageName, "com.nexalink.app.network.VpnProbeReceiver",
+        ), null, receiver, Handler(Looper.getMainLooper()), 0, null, null)
+        assertTrue("test APK probe receiver must complete", done.await(5, TimeUnit.SECONDS))
+        assertTrue("probe must execute under a distinct test APK UID", uid >= 0 && uid != Process.myUid())
+        assertTrue("test APK UDP send failed: $error", sent)
+    }
+
+    private fun awaitVpnRoute() {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val end = SystemClock.elapsedRealtime() + 10000
+        while (SystemClock.elapsedRealtime() < end) {
+            val ready = cm.allNetworks.any { network ->
+                cm.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true &&
+                    cm.getLinkProperties(network)?.routes?.any {
+                        it.matches(InetAddress.getByName("198.18.0.1"))
+                    } == true
+            }
+            if (ready) return
+            Thread.sleep(100)
+        }
+        fail("VPN network and probe route must be visible before sending")
     }
 
     @Test(timeout = 60000) fun consentAndGuestTunProduceLocalWireGuardHandshakeAndStop() {
@@ -63,24 +108,19 @@ class GuestVpnServiceInstrumentedTest {
                 assertEquals(Tunnel.State.UP, guest.start(config))
                 val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
                 cm.allNetworks.forEach { Log.i("NexaLinkVPN", "network=${it} routes=${cm.getLinkProperties(it)?.routes}") }
+                awaitVpnRoute()
                 Log.i("NexaLinkVPN", "Tunnel UP, cycle $it; sending routed probe")
                 val probe = DatagramSocket()
                 try {
                     val data = byteArrayOf(1, 2, 3)
                     probe.send(DatagramPacket(data, data.size, InetAddress.getByName("198.18.0.1"), 5555))
-                    // A second genuine IP sender uses Android's shell UID rather than
-                    // the VPN application's UID; some releases exempt the VPN app.
+                    // Only the distinct test APK UID proves an ordinary application route.
                     val wire = ByteArray(2048)
                     val packet = DatagramPacket(wire, wire.size)
                     var received = false
                     repeat(10) {
                         if (!received) {
-                            // This receiver runs as the separately installed test APK UID,
-                            // not as the VPN app or privileged adb shell.
-                            context.sendBroadcast(Intent().setClassName(
-                                instrumentation.context.packageName,
-                                "com.nexalink.app.network.VpnProbeReceiver",
-                            ))
+                            sendProbeFromTestUid()
                             try { socket.receive(packet); received = true }
                             catch (_: java.net.SocketTimeoutException) { }
                         }
