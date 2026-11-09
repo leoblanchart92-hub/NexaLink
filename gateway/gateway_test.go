@@ -11,14 +11,34 @@ import (
     "net"
     "net/netip"
     "strings"
+    "sync/atomic"
     "testing"
     "time"
 
     "golang.org/x/net/dns/dnsmessage"
     wgconn "golang.zx2c4.com/wireguard/conn"
     "golang.zx2c4.com/wireguard/device"
+    "golang.zx2c4.com/wireguard/tun"
     "golang.zx2c4.com/wireguard/tun/netstack"
 )
+
+// This decorator measures actual packet transfers at each WireGuard TUN
+// boundary; it does not inject packets or alter the data path.
+type countedTun struct {
+    tun.Device
+    reads atomic.Uint64
+    writes atomic.Uint64
+}
+func (c *countedTun) Read(bufs [][]byte, sizes []int, offset int) (int, error) {
+    n, err := c.Device.Read(bufs, sizes, offset)
+    if n > 0 { c.reads.Add(uint64(n)) }
+    return n, err
+}
+func (c *countedTun) Write(bufs [][]byte, offset int) (int, error) {
+    n, err := c.Device.Write(bufs, offset)
+    if n > 0 { c.writes.Add(uint64(n)) }
+    return n, err
+}
 
 func TestPacketAndPolicy(t *testing.T) {
     source := netip.MustParseAddr("10.77.0.2")
@@ -77,13 +97,15 @@ func TestWireGuardTCPUDPDNSRoundTrip(t *testing.T) {
     defer g.Close()
     ownerPrivate, ownerPublic := keypair(t); guestPrivate, guestPublic := keypair(t)
     logger := device.NewLogger(device.LogLevelSilent, "")
-    owner := device.NewDevice(g.Tun(), wgconn.NewDefaultBind(), logger); defer owner.Close()
+    ownerTun := &countedTun{Device: g.Tun()}
+    owner := device.NewDevice(ownerTun, wgconn.NewDefaultBind(), logger); defer owner.Close()
     if err := owner.IpcSet(fmt.Sprintf("private_key=%s\nlisten_port=0\npublic_key=%s\nallowed_ip=10.77.0.2/32\n", ownerPrivate, guestPublic)); err != nil { t.Fatal(err) }
     if err := owner.Up(); err != nil { t.Fatal(err) }
     settings, err := owner.IpcGet(); if err != nil { t.Fatal(err) }
     port := ""; for _, line := range strings.Split(settings,"\n") { if strings.HasPrefix(line,"listen_port=") { port=strings.TrimPrefix(line,"listen_port=") } }; if port=="" || port=="0" { t.Fatalf("missing port") }
     guestTun, guestNet, err := netstack.CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.77.0.2")}, nil, 1280); if err != nil { t.Fatal(err) }
-    guest := device.NewDevice(guestTun, wgconn.NewDefaultBind(), logger); defer guest.Close()
+    countedGuest := &countedTun{Device: guestTun}
+    guest := device.NewDevice(countedGuest, wgconn.NewDefaultBind(), logger); defer guest.Close()
     if err := guest.IpcSet(fmt.Sprintf("private_key=%s\npublic_key=%s\nallowed_ip=0.0.0.0/0\nendpoint=127.0.0.1:%s\npersistent_keepalive_interval=25\n", guestPrivate, ownerPublic, port)); err != nil { t.Fatal(err) }
     if err := guest.Up(); err != nil { t.Fatal(err) }
 
@@ -110,11 +132,17 @@ func TestWireGuardTCPUDPDNSRoundTrip(t *testing.T) {
     if _, err := badSocket.Write([]byte("unauthorized")); err != nil { t.Fatal(err) }
     buf := make([]byte,128); if _, err := badSocket.Read(buf); err == nil { t.Fatal("unauthorized peer received response") }
     _ = badSocket.Close(); bad.Close()
+    if ownerTun.writes.Load() != 0 { t.Fatal("unauthorized peer reached owner TUN") }
 
     tcpExchange([]byte("tcp-payload"),[]byte("tcp-payload"))
     udpExchange([]byte("udp-payload"),[]byte("udp-payload"))
     tcpExchange(query,response)
     udpExchange(query,response)
+    if ownerTun.reads.Load() == 0 || ownerTun.writes.Load() == 0 || countedGuest.reads.Load() == 0 || countedGuest.writes.Load() == 0 {
+        t.Fatalf("missing TUN packet direction: owner read=%d write=%d guest read=%d write=%d",
+            ownerTun.reads.Load(), ownerTun.writes.Load(), countedGuest.reads.Load(), countedGuest.writes.Load())
+    }
+    t.Logf("TUN packets owner read=%d write=%d guest read=%d write=%d", ownerTun.reads.Load(), ownerTun.writes.Load(), countedGuest.reads.Load(), countedGuest.writes.Load())
     var parsed dnsmessage.Message; if e:=parsed.Unpack(response); e!=nil || !parsed.Response || len(parsed.Answers)!=1 { t.Fatalf("invalid DNS response: %v",e) }
     // Closing the gateway must actively close a live outgoing socket.
     ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second); defer cancel()
