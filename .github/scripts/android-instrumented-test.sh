@@ -30,7 +30,7 @@ for ((attempt=1; attempt<=${NEXALINK_ATTEMPTS:-3}; attempt++)); do
     if [ -s "${diagnostics}/cycles-pull.err" ]; then
       echo "::notice title=PHASE81_PULL_${NEXALINK_DIAGNOSTIC_LABEL}::$(tail -c 500 "${diagnostics}/cycles-pull.err" | base64 -w0)"
     fi
-    python3 ../.github/scripts/summarize-cycles.py "${diagnostics}/cycles.jsonl" "${NEXALINK_DIAGNOSTIC_LABEL}"
+    python3 ../.github/scripts/summarize-cycles.py "${diagnostics}/cycles.jsonl" "${NEXALINK_DIAGNOSTIC_LABEL}" || status=1
   fi
   adb logcat -d -v threadtime > "${diagnostics}/logcat-${attempt}.log" 2>&1
   adb logcat -d -v brief -s Go:* > "${diagnostics}/go-${attempt}.log" 2>&1

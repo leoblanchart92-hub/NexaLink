@@ -34,8 +34,10 @@ def delta(r, name):
     return after[name] - before[name] if name in before and name in after else None
 
 failures = [r for r in rows if r.get('errors')]
+ids = [r.get('cycle') for r in rows]
+complete = len(rows) == 100 and set(ids) == set(range(100)) and parse_errors == 0
 summary = {
-    'label': label, 'requested': 100, 'recorded': len(rows), 'parse_errors': parse_errors,
+    'label': label, 'requested': 100, 'recorded': len(rows), 'parse_errors': parse_errors, 'complete': complete,
     'passed': len(rows) - len(failures), 'failed': len(failures), 'errors': counts,
     'by_mode': {mode: {'count': len([r for r in rows if r.get('mode') == mode]),
                        'failed': len([r for r in failures if r.get('mode') == mode])}
@@ -62,3 +64,7 @@ if len(chunks) <= 30:
         print(f'::notice title=PHASE81_DATA_{label}_{i:02d}::{chunk}')
 else:
     print(f'::warning title=PHASE81_DATA::{label}: records exceed annotation limit; use artifact')
+
+if not complete:
+    print(f'Incomplete or invalid cycle evidence for {label}', file=sys.stderr)
+    sys.exit(1)

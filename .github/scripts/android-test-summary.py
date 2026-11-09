@@ -24,5 +24,7 @@ for directory in sorted(p for p in root.glob('*') if p.is_dir()):
     result[directory.name] = {'exit': status_file.read_text().strip(), 'attempts': tests}
 channel = root / 'flutter-channel-status.txt'
 result['flutter-channel-exit'] = channel.read_text().strip() if channel.exists() else 'not-recorded'
-encoded = base64.b64encode(json.dumps(result, separators=(',', ':')).encode()).decode()
-print(f'::notice title=ANDROID_PHASE7_SUMMARY::{encoded}')
+data = json.dumps(result, separators=(',', ':')).encode()
+for i in range(0, len(data), 2400):
+    encoded = base64.b64encode(data[i:i + 2400]).decode()
+    print(f'::notice title=ANDROID_PHASE7_SUMMARY_{i // 2400:02d}::{encoded}')
