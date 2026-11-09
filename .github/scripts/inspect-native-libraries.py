@@ -33,4 +33,6 @@ with zipfile.ZipFile(apk) as archive, tempfile.TemporaryDirectory() as tmp:
         lines.append(f'shared defined dynamic symbols ({len(shared)}): {", ".join(shared)}')
 out.write_text('\n'.join(lines) + '\n')
 print(f'Native ABI/build metadata recorded in {out}; no execution is implied.')
-print('::notice title=NATIVE_ABI_METADATA::' + base64.b64encode(out.read_bytes()).decode())
+for index in range(0, len(out.read_bytes()), 2500):
+    chunk = out.read_bytes()[index:index + 2500]
+    print(f'::notice title=NATIVE_ABI_METADATA_{index // 2500:02d}::' + base64.b64encode(chunk).decode())
