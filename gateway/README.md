@@ -26,3 +26,15 @@ native dans un processus Android ; les tests répètent la création d'objets et
 le démarrage/arrêt, sans présenter cela comme un déchargement. Les appels sont
 sérialisés par le verrou Go : un arrêt demandé pendant un callback de démarrage
 attend que ce callback revienne ; il ne l'interrompt pas. Le service expérimental met l'arrêt en file sur son worker ; il ne peut pas interrompre immédiatement un callback bloqué et reste à valider sur appareil.
+
+
+## Phase 8 — vérification du trajet
+
+Les tests Go comptent maintenant les paquets lus et écrits aux deux TUN
+WireGuard et vérifient une réponse TCP, UDP et DNS réelle via des sockets
+loopback, ainsi que le rejet d'une mauvaise clé. Le pair de test Android
+`testfixture/` est un exécutable uniquement CI lié au loopback du runner ; il
+ne fait pas partie de l'AAR et ne transfère pas Internet. Voir les résultats
+et les limites dans [l'architecture réseau](../docs/architecture-reseau.md).
+Le routage invité Android reste intermittent ; le service propriétaire n'est
+pas raccordé à l'interface et le partage reste désactivé.

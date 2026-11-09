@@ -1,5 +1,7 @@
 # Étude du moteur réseau NexaLink
 
+> Les sections des phases précédentes sont historiques ; le résultat et les limites actuels figurent dans la section Phase 8 en fin de document.
+
 ## Actualisation phase 4
 
 Le code `gateway/mobile` produit un AAR gomobile incluant le moteur Go, WireGuard et gVisor. Un adaptateur Kotlin reçoit un `VpnService` et un réseau sélectionné ; son callback protège les descripteurs et tente de les lier au réseau cellulaire. Le démarrage exige ce callback ; il refuse une erreur plutôt que d'employer le réseau par défaut. Le processus de build et les appels JNI sont testés, mais pas encore le scénario réseau Android réel : un test utilise un callback factice permissif sur émulateur uniquement pour vérifier le démarrage et l'arrêt locaux, et un autre vérifie que le refus du callback empêche le démarrage. Aucun test ne prouve le fonctionnement de `VpnService.protect` ou de `Network.bindSocket` sur un réseau mobile physique.
@@ -243,3 +245,120 @@ Aucun téléphone physique n'a été testé. Le service propriétaire est un
 prototype exécutable par les tests mais **n'est pas opérationnel comme service
 de partage** ; les interfaces, l'acheminement complet, les clés, la révocation,
 le relais et les tests de bout en bout restent bloquants.
+
+
+## Phase 8 — diagnostic et état actuel
+
+**Phase non validée. Partage désactivé.** Le run
+[42575009419](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42575009419)
+(commit `c8381c3`) est en échec : le test invité d'aller-retour échoue encore
+sur Android 10 et 15 x86_64 après une première répétition réussie sur chaque
+version. Il n'y a pas eu de téléphone physique, de réseau mobile physique ou
+de test ARM Android. Le résultat n'est pas une preuve de stabilité en production.
+
+### Trajet et propriété des paquets
+
+* Invité : une application ordinaire écrit un datagramme IP ; le routage
+  Android le dirige vers le TUN créé par `GoBackend.VpnService`. GoBackend
+  détache son descripteur et le cède à wireguard-go, qui **lit** le TUN,
+  chiffre et émet en UDP ; les réponses UDP reçues sont déchiffrées puis
+  **écrites** dans ce TUN pour livraison à l'application. À l'arrêt, `wgTurnOff`
+  ferme le moteur et son TUN ; le service termine ensuite sa destruction.
+* Propriétaire : la socket UDP WireGuard est protégée et liée au réseau
+  cellulaire demandé. WireGuard authentifie et déchiffre, puis **écrit** les
+  IP invités dans le TUN en mémoire `bridge` ; gVisor les **lit** et termine
+  les flux TCP/UDP, dont les sockets sortants doivent aussi être protégés et
+  liés. gVisor **écrit** les réponses dans le TUN mémoire ; WireGuard les
+  **lit**, chiffre et renvoie. Le TUN Android de contrôle du propriétaire est
+  distinct, sans route Internet, et ne transporte pas les paquets invités.
+* Les deux rôles ne doivent pas détenir simultanément le VPN Android. Le bail
+  est en processus seulement et ne coordonne pas des processus séparés. Sur
+  l'invité, `stop` attend désormais la disparition du service WireGuard avant
+  de libérer ce bail ; en cas de doute il le conserve. Une révocation externe
+  nécessite encore un appel explicite de nettoyage. Cette attente n'a pas
+  résolu à elle seule les pertes intermittentes observées.
+
+### Sonde et point de perte
+
+Les annotations de [42526327162](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42526327162)
+montrent que l'ancien `VpnProbeReceiver` Kotlin de l'APK de test lançait
+`NoClassDefFoundError: kotlin.jvm.internal.Intrinsics` dans son propre processus :
+la sonde n'était donc pas exécutée. Ce défaut précis du test ne prouve pas la
+cause de tous les anciens timeouts, notamment ceux antérieurs à cette sonde.
+Le récepteur est maintenant en Java autonome, avec accusé d'exécution, contrôle
+de son UID distinct, vérification de la route et du réseau actif depuis cet
+UID et vérification de la disparition de l'ancien VPN. Le test de l'initiation
+ne peut plus réussir grâce à un datagramme de l'UID de l'application VPN.
+
+Le nouveau pair de test est une vraie instance wireguard-go sur le runner, dont
+la socket n'écoute que sur `127.0.0.1`. L'émulateur l'atteint par `10.0.2.2` ;
+son TUN/netstack répond à l'adresse synthétique `198.18.0.1:5555`, sans
+redirection ou sortie Internet. Les clés sont des vecteurs publics de test. Le
+profil Android utilise `10.77.0.2/32`, MTU 1280, route `0.0.0.0/0`, et la
+clé publique dérivée du pair. La route englobe l'endpoint afin de tester la
+protection de sa socket ; le code amont appelle `protect` pour IPv4 et IPv6,
+mais ne contrôle pas ses retours : les succès ponctuels ne couvrent pas un refus.
+
+Dans les cycles réussis, le pair a reçu une initiation, émis une réponse,
+reçu et déchiffré le datagramme puis chiffré l'écho ; le processus de l'APK
+séparé a reçu le contenu et l'origine attendus. Dans les cycles échoués du
+run ci-dessus, il voit un nouveau réseau VPN et sa route, `send` ne lève pas
+d'erreur, mais la réception expire, les compteurs WireGuard invités restent
+`tx=0 rx=0`, et le pair ne reçoit aucune initiation pour ce cycle. La perte
+se situe donc **avant une émission WireGuard observée** ; les compteurs seuls
+ne permettent pas de départager routage par UID, entrée/lecture du TUN, ou une
+autre cause. Aucun timeout n'est converti en succès. Les réponses sont bien
+réinjectées dans les cycles réussis, mais ce n'est pas reproductible.
+
+Le test Go `TestWireGuardTCPUDPDNSRoundTrip` utilise deux vrais pairs et des
+sockets loopback ; un décorateur compte les paquets effectivement lus et écrits
+par leurs TUN sans modifier leur trajet. Il vérifie les quatre directions, la
+mauvaise clé, TCP/UDP/DNS et la fermeture d'une connexion active. Les deux
+runners Linux x86_64 et ARM64 ont passé les tests avec `-race` ; le dialer
+local de test n'est pas le dialer cellulaire Android.
+
+### Crash natif et choix d'architecture
+
+La trace historique du [run 42517243752](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42517243752)
+montre le chargement réussi des deux bibliothèques dans le même processus,
+puis `signal 11`, sans pile native exploitable. L'analyse ELF de l'APK Phase 8
+établit que `libgojni.so` est compilée avec Go 1.26.10 et wireguard-go
+`f333402bd9cb`, tandis que `libwg-go.so` de l'AAR WireGuard embarque Go 1.20.3
+et wireguard-go `21636207a675`. Sur x86_64 les deux exportent 31 symboles
+dynamiques définis en commun, notamment `crosscall2`, `_cgo_*` et `x_cgo_*`.
+Ce chevauchement et les deux versions de runtime sont des risques concrets à
+étudier, **pas une preuve** d'interposition de symboles ni de la cause du
+`SIGSEGV` : il manque la pile, les résolutions dynamiques à l'exécution et une
+reproduction isolée. Le défaut de liaison `Network.bindSocket` des phases
+précédentes était distinct ; demander un réseau cellulaire validé a permis des
+démarrages sur émulateur, sans établir sa cause historique exacte.
+
+La protection actuelle réserve irréversiblement un seul runtime Go par
+processus ; le diagnostic Flutter s'exécute à part. Les tests des deux rôles
+utilisent des processus d'instrumentation distincts, et les séries propriétaire
+ne suffisent pas à innocenter le mélange des runtimes. Une architecture à un
+seul runtime est envisageable, mais demande de reconstruire/intégrer les API
+JNI de `GoBackend` et gomobile avec une version commune de wireguard-go, de
+préserver le transfert de propriété du FD TUN, de rendre la protection vérifiable
+et de retester concurrence, arrêt et licences. Ce n'est pas un simple changement
+de dépendance, et elle n'a pas été implémentée sans preuve ni tests. Une autre
+option serait un processus par rôle et un coordinateur unique interprocessus,
+avec arrêt confirmé et consentement avant toute transition ; le bail actuel ne
+suffit pas pour cela. Aucun basculement sûr entre rôles n'est encore proposé à
+l'utilisateur.
+
+### Couverture du dernier run
+
+Backend, Flutter analyze/tests, canal Flutter–Kotlin–Go, tests unitaires Kotlin,
+construction APK et ABI, tests Go `-race` Linux x86_64 et ARM64 et suites cœur
+JNI Android 10/15 x86_64 passent. Le propriétaire y passe trois séries de
+consentement automatisé, démarrage/arrêt et perte/retour cellulaire de
+l'émulateur. Le test invité échoue à sa deuxième répétition sur les deux
+versions ; les résultats précédents ne sont pas effacés. Android 6 x86 passe
+les tests JNI de base, mais les tests VPN propriétaire/invité y sont ignorés
+par condition d'API et ne constituent pas une validation VPN. Le diagnostic
+Flutter avait échoué dans [42567387077](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42567387077),
+puis a réussi dans les runs suivants : sa cause précédente reste inconnue.
+Aucun nouveau crash natif n'est rapporté dans ces séries, ce qui ne démontre
+pas l'absence générale de crash ou de fuite. Les essais ARM traduits n'ont pas
+été lancés. Les résultats ELF ARM n'établissent que l'empaquetage, pas l'exécution.

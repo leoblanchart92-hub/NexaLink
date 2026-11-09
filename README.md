@@ -2,6 +2,10 @@
 
 **État : le partage Internet à distance et le VPN ne sont pas utilisables.** Des composants natifs WireGuard expérimentaux existent mais ne sont pas raccordés à l'interface ni testés sur appareils ; une bibliothèque expérimentale de passerelle et son pont Android sont compilés, mais leur démarrage n'est pas raccordé à l'application ; aucun relais n'est implémenté. Cette version ne transfère aucun trafic réseau d'un appareil à l'autre et ne doit pas être utilisée en production. L'application montre clairement cette limite.
 
+## État des tests Phase 8
+
+Le [dernier run testé](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42575009419) est **en échec** : le test invité perd encore des paquets après redémarrage sur Android 10 et 15 x86_64, malgré des échanges WireGuard aller-retour réussis sur certains cycles. Aucun téléphone physique ou Android ARM n'a été testé. Les tests propriétaire sur le réseau simulé de l'émulateur passent, mais cela ne prouve pas une sortie cellulaire réelle. Les détails, traces et limites figurent dans [l'architecture réseau](docs/architecture-reseau.md).
+
 ## Ce qui existe
 
 - Application Flutter Android : configuration d'un serveur HTTPS, création et lecture d'un QR d'invitation, demande explicite de l'invité, approbation/révocation par le propriétaire et consultation du statut d'association.
