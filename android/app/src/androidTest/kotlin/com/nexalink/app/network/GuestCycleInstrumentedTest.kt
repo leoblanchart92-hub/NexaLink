@@ -43,6 +43,7 @@ import java.util.concurrent.TimeoutException
 @RunWith(AndroidJUnit4::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class GuestCycleInstrumentedTest {
+    companion object { @Volatile private var cleanupUncertain = false }
     private val inst = InstrumentationRegistry.getInstrumentation()
     private val context = inst.targetContext
 
@@ -165,6 +166,7 @@ class GuestCycleInstrumentedTest {
 
     @Test(timeout = 120000) fun zGuestNetworkLossAndReturn() {
         assumeTrue(Build.VERSION.SDK_INT >= 29)
+        assertFalse("previous cycle left VPN cleanup uncertain", cleanupUncertain)
         val guestKey = KeyPair(Key.fromBase64("YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="))
         val ownerKey = KeyPair(Key.fromBase64("YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="))
         val config = Config.Builder().setInterface(Interface.Builder().setKeyPair(guestKey)
@@ -300,7 +302,10 @@ class GuestCycleInstrumentedTest {
                     if (errors.isNotEmpty()) failures++
                     android.util.Log.i("NexaLinkCycle", "RECORD=${row}")
                 }
-                if (blocked) break // fail closed: never overlap another VPN when cleanup is uncertain
+                if (blocked) {
+                    cleanupUncertain = true
+                    break // fail closed: never overlap another VPN when cleanup is uncertain
+                }
             }
         } finally { shell("appops set ${context.packageName} ACTIVATE_VPN ignore") }
         assertEquals("all 100 cycles must execute; diagnostics in phase81-cycles.jsonl", 100, completed)
