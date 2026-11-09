@@ -2,6 +2,7 @@
 """Report all outcomes while retaining individual sanitized records as an artifact."""
 import base64
 import collections
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -46,7 +47,18 @@ summary = {
     'failure_examples': [dict(cycle=r.get('cycle'), errors=r.get('errors'),
                               probe=r.get('probe'), tunBefore=r.get('tunBefore'), tunAfter=r.get('tunAfter'),
                               wgTx=r.get('wgTxBytes'), wgRx=r.get('wgRxBytes'),
-                              bound=r.get('boundDiagnostic')) for r in failures[:2]],
+                              bound=r.get('boundDiagnostic'), sockets=r.get('wireSocketsBefore'),
+                              closed=r.get('wireSocketsClosed')) for r in failures[:2]],
 }
 encoded = base64.b64encode(json.dumps(summary, separators=(',', ':')).encode()).decode()
 print(f'::notice title=PHASE81_CYCLES_{label}::{encoded}')
+
+# Compact, sanitized per-cycle records in annotations as well as the artifact;
+# this keeps partial evidence accessible if a job times out. Never output keys.
+compressed = base64.b64encode(gzip.compress(path.read_bytes())).decode()
+chunks = [compressed[i:i + 1800] for i in range(0, len(compressed), 1800)]
+if len(chunks) <= 30:
+    for i, chunk in enumerate(chunks):
+        print(f'::notice title=PHASE81_DATA_{label}_{i:02d}::{chunk}')
+else:
+    print(f'::warning title=PHASE81_DATA::{label}: records exceed annotation limit; use artifact')

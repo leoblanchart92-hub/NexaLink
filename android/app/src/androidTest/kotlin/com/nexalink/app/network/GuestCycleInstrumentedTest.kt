@@ -5,6 +5,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.net.VpnService
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -12,6 +14,8 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.os.SystemClock
+import android.system.Os
+import android.system.OsConstants
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.wireguard.android.backend.Tunnel
@@ -26,6 +30,8 @@ import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import org.junit.FixMethodOrder
+import org.junit.runners.MethodSorters
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -33,6 +39,7 @@ import java.util.concurrent.TimeUnit
 
 /** Real network test, never part of a release APK. No success retry. */
 @RunWith(AndroidJUnit4::class)
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class GuestCycleInstrumentedTest {
     private val inst = InstrumentationRegistry.getInstrumentation()
     private val context = inst.targetContext
@@ -72,6 +79,51 @@ class GuestCycleInstrumentedTest {
         @Suppress("DEPRECATION")
         return am.getRunningServices(100).any { it.service.className == "com.wireguard.android.backend.GoBackend\$VpnService" }
     }
+    // Reflection is confined to instrumentation. It never changes a socket or
+    // calls protect: upstream GoBackend does not expose protect's return value.
+    private fun wireGuardSockets(guest: GuestTunnel): JSONObject {
+        val result = JSONObject()
+        try {
+            val field = GuestTunnel::class.java.getDeclaredField("backend").apply { isAccessible = true }
+            val backend = field.get(guest)
+            val type = backend.javaClass
+            val handle = type.getDeclaredField("currentTunnelHandle").apply { isAccessible = true }.getInt(backend)
+            result.put("handleValid", handle >= 0)
+            for (family in listOf("V4", "V6")) {
+                val socket = JSONObject()
+                try {
+                    val method = type.getDeclaredMethod("wgGetSocket$family", Int::class.javaPrimitiveType).apply { isAccessible = true }
+                    val fd = method.invoke(null, handle) as Int
+                    socket.put("fd", fd)
+                    if (fd >= 0) {
+                        socket.put("link", Os.readlink("/proc/self/fd/$fd"))
+                        ParcelFileDescriptor.fromFd(fd).use { copy ->
+                            try {
+                                // Linux SO_MARK=36. It is diagnostic only; no mark is changed.
+                                val get = Os::class.java.getMethod("getsockoptInt", java.io.FileDescriptor::class.java,
+                                    Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+                                socket.put("soMark", get.invoke(null, copy.fileDescriptor, OsConstants.SOL_SOCKET, 36) as Int)
+                            } catch (e: Exception) { socket.put("soMarkError", e.javaClass.simpleName) }
+                        }
+                    }
+                } catch (e: Exception) { socket.put("error", e.javaClass.simpleName) }
+                result.put(family, socket)
+            }
+        } catch (e: Exception) { result.put("error", e.javaClass.simpleName) }
+        return result
+    }
+
+    private fun socketsClosed(previous: JSONObject): JSONObject = JSONObject().apply {
+        for (family in listOf("V4", "V6")) {
+            val old = previous.optJSONObject(family) ?: continue
+            val fd = old.optInt("fd", -1)
+            val oldLink = old.optString("link", "")
+            if (fd < 0 || !oldLink.startsWith("socket:[")) { put(family, "unavailable"); continue }
+            val current = try { Os.readlink("/proc/self/fd/$fd") } catch (_: Exception) { "closed" }
+            put(family, if (current == oldLink) "still-open" else "closed-or-reused")
+        }
+    }
+
     private fun recordProbe(b: Bundle): JSONObject = JSONObject().apply {
         for (k in listOf("uid", "localPort", "sentBytes", "receivedBytes")) put(k, b.getInt(k, -1))
         for (k in listOf("networkHandle", "startedElapsedMs", "sentElapsedMs", "receivedElapsedMs", "finishedElapsedMs")) put(k, b.getLong(k, -1))
@@ -80,7 +132,62 @@ class GuestCycleInstrumentedTest {
         put("error", b.getString("error", "none"))
     }
 
-    @Test(timeout = 1800000) fun oneHundredRealGuestCycles() {
+    private fun physicalInternetAvailable(): Boolean {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return cm.allNetworks.any { network ->
+            val caps = cm.getNetworkCapabilities(network)
+            caps != null && !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        }
+    }
+    private fun awaitPhysicalNetwork(available: Boolean): Boolean {
+        val deadline = SystemClock.elapsedRealtime() + 20000
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (physicalInternetAvailable() == available) return true
+            Thread.sleep(100)
+        }
+        return false
+    }
+
+    @Test(timeout = 120000) fun zGuestNetworkLossAndReturn() {
+        assumeTrue(Build.VERSION.SDK_INT >= 29)
+        val guestKey = KeyPair(Key.fromBase64("YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="))
+        val ownerKey = KeyPair(Key.fromBase64("YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="))
+        val config = Config.Builder().setInterface(Interface.Builder().setKeyPair(guestKey)
+            .addAddress(InetNetwork.parse("10.77.0.2/32")).setMtu(1280).build())
+            .addPeer(Peer.Builder().setPublicKey(ownerKey.publicKey)
+                .setEndpoint(InetEndpoint.parse("10.0.2.2:38673"))
+                .addAllowedIp(InetNetwork.parse("0.0.0.0/0")).build()).build()
+        val guest = GuestTunnel(context)
+        try {
+            shell("appops set ${context.packageName} ACTIVATE_VPN allow")
+            assertNull(VpnService.prepare(context))
+            assertTrue("initial physical network must be validated", awaitPhysicalNetwork(true))
+            assertTrue("old VPN must be gone", probe(900, stopped = true).getBoolean("vpnGone"))
+            assertEquals(Tunnel.State.UP, guest.start(config))
+            assertTrue("initial echo", probe(901).getBoolean("echo"))
+            shell("svc wifi disable")
+            shell("svc data disable")
+            assertTrue("both physical networks must disappear", awaitPhysicalNetwork(false))
+            val offline = probe(902)
+            android.util.Log.i("NexaLinkCycle", "network-offline ${recordProbe(offline)}")
+            assertTrue("offline probe must execute as a different UID", offline.getInt("uid", -1) >= 0 && offline.getInt("uid", -1) != Process.myUid())
+            assertFalse("no echo is possible without an underlying network", offline.getBoolean("echo"))
+            shell("svc data enable")
+            shell("svc wifi enable")
+            assertTrue("physical network must return validated", awaitPhysicalNetwork(true))
+            val restored = probe(903)
+            android.util.Log.i("NexaLinkCycle", "network-restored ${recordProbe(restored)}")
+            assertTrue("echo must resume after real network restoration", restored.getBoolean("echo"))
+        } finally {
+            shell("svc data enable")
+            shell("svc wifi enable")
+            try { guest.stop() } finally { shell("appops set ${context.packageName} ACTIVATE_VPN ignore") }
+        }
+    }
+
+    @Test(timeout = 3600000) fun oneHundredRealGuestCycles() {
         assumeTrue(Build.VERSION.SDK_INT >= 29)
         shell("appops set ${context.packageName} ACTIVATE_VPN allow")
         assertNull("emulator VPN authorization", VpnService.prepare(context))
@@ -105,6 +212,7 @@ class GuestCycleInstrumentedTest {
                     .put("fdBefore", count("/proc/self/fd")).put("threadsBefore", count("/proc/self/task"))
                 val errors = mutableListOf<String>()
                 var started = false
+                var sockets: JSONObject? = null
                 try {
                     val before = probe(cycle, stopped = true)
                     row.put("before", recordProbe(before))
@@ -114,6 +222,8 @@ class GuestCycleInstrumentedTest {
                     }
                     row.put("serviceAfterStart", serviceRunning())
                     if (started) {
+                        sockets = wireGuardSockets(guest)
+                        row.put("wireSocketsBefore", sockets)
                         val inspected = probe(cycle, inspect = true)
                         row.put("inspect", recordProbe(inspected))
                         val iface = inspected.getString("interfaceName")
@@ -121,6 +231,7 @@ class GuestCycleInstrumentedTest {
                         val result = probe(cycle)
                         row.put("probe", recordProbe(result))
                         row.put("tunAfter", tunCounters(iface))
+                        row.put("wireSocketsAfter", wireGuardSockets(guest))
                         val stats = guest.statistics()
                         val peer = stats.peer(ownerKey.publicKey)
                         row.put("wgTxBytes", stats.totalTx()).put("wgRxBytes", stats.totalRx())
@@ -131,7 +242,7 @@ class GuestCycleInstrumentedTest {
                         if (stats.totalTx() <= 0 || stats.totalRx() <= 0) errors.add("wg-bytes")
                         if ((peer?.latestHandshakeEpochMillis() ?: 0L) <= 0L) errors.add("handshake")
                         // Differential probe is diagnostic only: it cannot turn a failed cycle into success.
-                        if (errors.isNotEmpty()) row.put("boundDiagnostic", recordProbe(probe(cycle, bound = true)))
+                        if (errors.isNotEmpty() && failures < 10) row.put("boundDiagnostic", recordProbe(probe(cycle, bound = true)))
                     }
                 } catch (e: Exception) {
                     errors.add("exception:${e.javaClass.simpleName}")
@@ -141,6 +252,11 @@ class GuestCycleInstrumentedTest {
                     try {
                         val state = guest.stop()
                         row.put("stopState", state.toString()).put("serviceAfterStop", serviceRunning())
+                        sockets?.let {
+                            val closed = socketsClosed(it)
+                            row.put("wireSocketsClosed", closed)
+                            if (closed.optString("V4") == "still-open" || closed.optString("V6") == "still-open") errors.add("wire-socket-still-open")
+                        }
                         if (state != Tunnel.State.DOWN || serviceRunning()) errors.add("service-not-stopped")
                         val stopped = probe(cycle, stopped = true)
                         row.put("after", recordProbe(stopped))
