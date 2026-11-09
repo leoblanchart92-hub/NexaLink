@@ -408,7 +408,8 @@ Résultats confirmés, **pas une validation des 100 cycles** :
   [42712900355](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42712900355)
   et [42713526877](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42713526877)
   n'étaient pas terminés lors de cette rédaction ; les étapes Android 10 des
-  deux premiers ont déjà échoué. Aucun décompte final ne peut en être déduit.
+  deux premiers et Android 15 du deuxième ont déjà échoué. Aucun décompte
+  final ne peut en être déduit.
 * `dce13da` borne les étapes émulateur et supprime le pipe `tee` susceptible de
   rester ouvert après timeout ; `d1dfead` ajuste ces limites pour laisser leur
   budget aux suites. Les runs [42713608334](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42713608334)
