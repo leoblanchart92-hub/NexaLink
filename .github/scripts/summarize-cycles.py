@@ -50,20 +50,18 @@ summary = {
                               probe=r.get('probe'), tunBefore=r.get('tunBefore'), tunAfter=r.get('tunAfter'),
                               wgTx=r.get('wgTxBytes'), wgRx=r.get('wgRxBytes'),
                               bound=r.get('boundDiagnostic'), sockets=r.get('wireSocketsBefore'),
-                              closed=r.get('wireSocketsClosed')) for r in failures[:2]],
+                              closed=r.get('wireSocketsClosed')) for r in failures[:1]],
+    'socket_v4_mark_available': sum(isinstance(r.get('wireSocketsBefore', {}).get('V4', {}).get('soMark'), int) for r in rows),
+    'socket_v4_mark_bit17_set': sum(bool(r.get('wireSocketsBefore', {}).get('V4', {}).get('soMark', 0) & (1 << 17)) for r in rows),
 }
 encoded = base64.b64encode(json.dumps(summary, separators=(',', ':')).encode()).decode()
 print(f'::notice title=PHASE81_CYCLES_{label}::{encoded}')
 
-# Compact, sanitized per-cycle records in annotations as well as the artifact;
-# this keeps partial evidence accessible if a job times out. Never output keys.
+# Full per-cycle sanitized records remain in the uploaded artifact. Emit a
+# compressed copy only when it fits in one notice (GitHub limits notices/step).
 compressed = base64.b64encode(gzip.compress(path.read_bytes())).decode()
-chunks = [compressed[i:i + 1800] for i in range(0, len(compressed), 1800)]
-if len(chunks) <= 30:
-    for i, chunk in enumerate(chunks):
-        print(f'::notice title=PHASE81_DATA_{label}_{i:02d}::{chunk}')
-else:
-    print(f'::warning title=PHASE81_DATA::{label}: records exceed annotation limit; use artifact')
+if len(compressed) <= 1800:
+    print(f'::notice title=PHASE81_DATA_{label}_00::{compressed}')
 
 if not complete:
     print(f'Incomplete or invalid cycle evidence for {label}', file=sys.stderr)

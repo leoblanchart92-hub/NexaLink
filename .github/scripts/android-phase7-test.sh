@@ -28,7 +28,7 @@ for role in Guest Owner; do
   NEXALINK_TEST_CLASS="com.nexalink.app.network.${role}VpnServiceInstrumentedTest" \
     bash .github/scripts/android-instrumented-test.sh || status=1
   if [ "$role" = Guest ]; then
-    echo "::notice title=TEST_PEER_${base}::$(tail -c 5000 "$fixture_log" | base64 -w0)"
+    echo "::notice title=TEST_PEER_${base}::$(tail -c 1800 "$fixture_log" | base64 -w0)"
   fi
 done
 # Run the 100-cycle test once on supported x86_64 emulators, preserving every failure.
