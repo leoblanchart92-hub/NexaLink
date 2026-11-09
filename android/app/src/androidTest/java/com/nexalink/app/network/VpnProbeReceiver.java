@@ -24,6 +24,7 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
         new Thread(() -> {
             Bundle result = new Bundle();
             result.putInt("uid", Process.myUid());
+            result.putLong("startedElapsedMs", SystemClock.elapsedRealtime());
             String phase = "network";
             try {
                 if (intent.getBooleanExtra("expectStopped", false)) {
@@ -52,6 +53,8 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                                 if (route.matches(InetAddress.getByName("198.18.0.1"))) { ready = true; break; }
                             }
                             if (ready) {
+                                result.putLong("networkHandle", active.getNetworkHandle());
+                                result.putString("interfaceName", links.getInterfaceName());
                                 Log.i("NexaLinkVPN", "Test UID VPN handle=" + active.getNetworkHandle());
                                 break;
                             }
@@ -61,21 +64,38 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                     result.putBoolean("vpnReady", ready);
                     if (!ready) throw new IllegalStateException("VPN is not active for test UID");
                 }
+                if (intent.getBooleanExtra("inspectOnly", false)) return;
                 phase = "socket";
                 try (DatagramSocket socket = new DatagramSocket()) {
-                byte[] bytes = {1, 2, 3};
+                if (intent.getBooleanExtra("bindVpn", false)) {
+                    phase = "bind";
+                    ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+                    Network active = cm.getActiveNetwork();
+                    if (active == null || active.getNetworkHandle() != result.getLong("networkHandle"))
+                        throw new IllegalStateException("VPN changed before bind");
+                    active.bindSocket(socket);
+                    result.putBoolean("boundVpn", true);
+                }
+                int cycle = intent.getIntExtra("cycle", -1);
+                byte[] bytes = cycle < 0 ? new byte[]{1, 2, 3} :
+                        String.format(java.util.Locale.ROOT, "cycle:%03d", cycle).getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                result.putInt("localPort", socket.getLocalPort());
                 phase = "send";
                 socket.send(new DatagramPacket(bytes, bytes.length,
                         InetAddress.getByName("198.18.0.1"), 5555));
                 result.putBoolean("sent", true);
+                result.putInt("sentBytes", bytes.length);
+                result.putLong("sentElapsedMs", SystemClock.elapsedRealtime());
                 if (intent.getBooleanExtra("expectEcho", false)) {
                     phase = "receive";
                     socket.setSoTimeout(4500);
                     byte[] reply = new byte[128];
                     DatagramPacket response = new DatagramPacket(reply, reply.length);
                     socket.receive(response);
-                    result.putBoolean("echo", response.getLength() == 3 &&
-                            reply[0] == 1 && reply[1] == 2 && reply[2] == 3 &&
+                    byte[] actual = java.util.Arrays.copyOf(reply, response.getLength());
+                    result.putInt("receivedBytes", response.getLength());
+                    result.putLong("receivedElapsedMs", SystemClock.elapsedRealtime());
+                    result.putBoolean("echo", java.util.Arrays.equals(bytes, actual) &&
                             response.getAddress().equals(InetAddress.getByName("198.18.0.1")) &&
                             response.getPort() == 5555);
                 }
@@ -89,6 +109,7 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                 result.putString("error", phase + ":" + failure.getClass().getSimpleName() + ":errno=" + errno);
                 Log.w("NexaLinkVPN", "Test APK UID probe failed at " + phase + ": " + failure.getClass().getSimpleName() + ", errno=" + errno);
             } finally {
+                result.putLong("finishedElapsedMs", SystemClock.elapsedRealtime());
                 pending.setResultExtras(result);
                 pending.finish();
             }

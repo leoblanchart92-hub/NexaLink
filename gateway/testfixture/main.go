@@ -77,7 +77,12 @@ func main() {
     buf := make([]byte, 2048)
     for {
         n, addr, err := echo.ReadFrom(buf); if err != nil { fmt.Fprintln(os.Stderr, "echo stopped"); return }
-        log.Printf("peer decrypted UDP packets=1 bytes=%d", n)
+        cycle := "unspecified"
+        if n == 9 && strings.HasPrefix(string(buf[:n]), "cycle:") {
+            candidate := string(buf[6:n])
+            if candidate[0] >= '0' && candidate[0] <= '9' && candidate[1] >= '0' && candidate[1] <= '9' && candidate[2] >= '0' && candidate[2] <= '9' { cycle = candidate }
+        }
+        log.Printf("peer decrypted UDP cycle=%s packets=1 bytes=%d", cycle, n)
         if _, err = echo.WriteTo(buf[:n], addr); err != nil { log.Print("echo write failed: ", err) } else { log.Print("peer echo sent packets=1") }
     }
 }

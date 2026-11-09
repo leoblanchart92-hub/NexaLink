@@ -5,7 +5,7 @@ set +e
 base=${NEXALINK_DIAGNOSTIC_LABEL:-android-29-x86_64}
 status=0
 NEXALINK_DIAGNOSTIC_LABEL="${base}-core" \
-NEXALINK_TEST_EXCLUDE='com.nexalink.app.network.GuestVpnServiceInstrumentedTest,com.nexalink.app.network.OwnerVpnServiceInstrumentedTest' \
+NEXALINK_TEST_EXCLUDE='com.nexalink.app.network.GuestVpnServiceInstrumentedTest,com.nexalink.app.network.OwnerVpnServiceInstrumentedTest,com.nexalink.app.network.GuestCycleInstrumentedTest' \
   bash .github/scripts/android-instrumented-test.sh || status=1
 # Host-only fixture: UDP binds strictly to loopback; no Internet forwarding.
 mkdir -p test-diagnostics
@@ -31,4 +31,10 @@ for role in Guest Owner; do
     echo "::notice title=TEST_PEER_${base}::$(tail -c 5000 "$fixture_log" | base64 -w0)"
   fi
 done
+# Run the 100-cycle test once on supported x86_64 emulators, preserving every failure.
+if [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -ge 29 ]; then
+  NEXALINK_DIAGNOSTIC_LABEL="${base}-cycles" NEXALINK_TEST_CLASS='com.nexalink.app.network.GuestCycleInstrumentedTest' \
+  NEXALINK_ATTEMPTS=1 NEXALINK_TEST_TIMEOUT=1800 NEXALINK_CYCLE_TEST=1 \
+    bash .github/scripts/android-instrumented-test.sh || status=1
+fi
 exit "$status"

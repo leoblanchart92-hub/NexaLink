@@ -5,8 +5,8 @@ cd android || exit 1
 diagnostics="../test-diagnostics/${NEXALINK_DIAGNOSTIC_LABEL:-android-29-x86_64}"
 mkdir -p "$diagnostics"
 status=0
-for attempt in 1 2 3; do
-  echo "Android instrumentation attempt $attempt/3"
+for ((attempt=1; attempt<=${NEXALINK_ATTEMPTS:-3}; attempt++)); do
+  echo "Android instrumentation attempt $attempt/${NEXALINK_ATTEMPTS:-3}"
   adb logcat -c
   args=()
   if [ -n "${NEXALINK_TEST_CLASS:-}" ]; then
@@ -17,8 +17,12 @@ for attempt in 1 2 3; do
   if [ -n "${NEXALINK_TEST_ABI:-}" ]; then
     args+=("-PnexalinkTestAbi=${NEXALINK_TEST_ABI}" "-Pandroid.testInstrumentationRunnerArguments.expectedGoArch=${NEXALINK_GO_ARCH}")
   fi
-  timeout 420 ./gradlew :app:connectedDebugAndroidTest "${args[@]}" 2>&1 | tee "${diagnostics}/gradle-${attempt}.log"
+  timeout "${NEXALINK_TEST_TIMEOUT:-420}" ./gradlew :app:connectedDebugAndroidTest "${args[@]}" 2>&1 | tee "${diagnostics}/gradle-${attempt}.log"
   status=${PIPESTATUS[0]}
+  if [ "${NEXALINK_CYCLE_TEST:-0}" = 1 ]; then
+    adb exec-out run-as com.nexalink.app cat files/phase81-cycles.jsonl > "${diagnostics}/cycles.jsonl" 2> "${diagnostics}/cycles-pull.err"
+    python3 ../.github/scripts/summarize-cycles.py "${diagnostics}/cycles.jsonl" "${NEXALINK_DIAGNOSTIC_LABEL}"
+  fi
   adb logcat -d -v threadtime > "${diagnostics}/logcat-${attempt}.log" 2>&1
   adb logcat -d -v brief -s Go:* > "${diagnostics}/go-${attempt}.log" 2>&1
   cp -R ../build/app/outputs/androidTest-results/connected "${diagnostics}/results-${attempt}" 2>/dev/null
