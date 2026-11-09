@@ -73,7 +73,21 @@ class GuestCycleInstrumentedTest {
     // Shell permissions may deny these: retain "unavailable" rather than inventing a value.
     private fun tunCounters(iface: String?): String {
         if (iface == null || !iface.matches(Regex("[A-Za-z0-9_.-]{1,32}"))) return "unavailable-interface"
-        return shell("for x in tx_packets tx_bytes tx_dropped tx_errors rx_packets rx_bytes rx_dropped rx_errors; do printf '%s=' \"\$x\"; cat /sys/class/net/$iface/statistics/\$x 2>/dev/null || printf 'unavailable\\n'; done").replace('\n', ',')
+        // Do not read a UiAutomation shell pipe here: on these emulators it
+        // remained open indefinitely. Direct, bounded, read-only sysfs access
+        // may be denied by SELinux; report that rather than fabricating counts.
+        val pool = Executors.newSingleThreadExecutor { task -> Thread(task, "tun-counter-read").apply { isDaemon = true } }
+        return try {
+            pool.submit<String> {
+                listOf("tx_packets", "tx_bytes", "tx_dropped", "tx_errors", "rx_packets", "rx_bytes", "rx_dropped", "rx_errors").joinToString(",") { name ->
+                    val value = try {
+                        File("/sys/class/net/$iface/statistics/$name").bufferedReader().use { it.readLine()?.trim() }
+                    } catch (_: Exception) { null }
+                    "$name=${if (value != null && value.matches(Regex("[0-9]+"))) value else "unavailable"}"
+                }
+            }.get(3, TimeUnit.SECONDS)
+        } catch (_: Exception) { "unavailable-or-timeout" }
+        finally { pool.shutdownNow() }
     }
 
     private fun count(path: String): Int = File(path).list()?.size ?: -1
@@ -202,7 +216,7 @@ class GuestCycleInstrumentedTest {
         }
     }
 
-    @Test(timeout = 3000000) fun oneHundredRealGuestCycles() {
+    @Test(timeout = 2400000) fun oneHundredRealGuestCycles() {
         assumeTrue(Build.VERSION.SDK_INT >= 29)
         shell("appops set ${context.packageName} ACTIVATE_VPN allow")
         assertNull("emulator VPN authorization", VpnService.prepare(context))
@@ -245,9 +259,11 @@ class GuestCycleInstrumentedTest {
                         row.put("wireSocketsBefore", sockets)
                         checkpoint(cycle, "inspect")
                         val inspected = probe(cycle, inspect = true)
+                        checkpoint(cycle, "inspected")
                         row.put("inspect", recordProbe(inspected))
                         val iface = inspected.getString("interfaceName")
                         row.put("tunBefore", tunCounters(iface))
+                        checkpoint(cycle, "counters-before")
                         checkpoint(cycle, "probe")
                         val result = probe(cycle)
                         checkpoint(cycle, "probed")
