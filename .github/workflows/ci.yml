@@ -121,6 +121,8 @@ jobs:
       - run: flutter build apk --release
       - name: Vérifier les architectures natives empaquetées
         run: python3 .github/scripts/check-android-abis.py
+      - name: Analyser ABI et symboles des bibliothèques natives
+        run: python3 .github/scripts/inspect-native-libraries.py
       - uses: actions/upload-artifact@v4
         with:
           name: NexaLink-android-development-apk
