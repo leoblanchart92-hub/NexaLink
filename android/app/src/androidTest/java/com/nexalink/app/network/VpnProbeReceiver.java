@@ -11,6 +11,7 @@ import android.net.RouteInfo;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.os.Process;
+import android.system.ErrnoException;
 import android.util.Log;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -23,6 +24,7 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
         new Thread(() -> {
             Bundle result = new Bundle();
             result.putInt("uid", Process.myUid());
+            String phase = "network";
             try {
                 if (intent.getBooleanExtra("expectStopped", false)) {
                     ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -37,7 +39,7 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                     result.putBoolean("vpnGone", gone);
                     return;
                 }
-                if (intent.getBooleanExtra("expectEcho", false)) {
+                {
                     ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
                     long deadline = SystemClock.elapsedRealtime() + 4000;
                     boolean ready = false;
@@ -49,19 +51,25 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                             for (RouteInfo route : links.getRoutes()) {
                                 if (route.matches(InetAddress.getByName("198.18.0.1"))) { ready = true; break; }
                             }
-                            if (ready) break;
+                            if (ready) {
+                                Log.i("NexaLinkVPN", "Test UID VPN handle=" + active.getNetworkHandle());
+                                break;
+                            }
                         }
                         Thread.sleep(50);
                     } while (SystemClock.elapsedRealtime() < deadline);
                     result.putBoolean("vpnReady", ready);
                     if (!ready) throw new IllegalStateException("VPN is not active for test UID");
                 }
+                phase = "socket";
                 try (DatagramSocket socket = new DatagramSocket()) {
                 byte[] bytes = {1, 2, 3};
+                phase = "send";
                 socket.send(new DatagramPacket(bytes, bytes.length,
                         InetAddress.getByName("198.18.0.1"), 5555));
                 result.putBoolean("sent", true);
                 if (intent.getBooleanExtra("expectEcho", false)) {
+                    phase = "receive";
                     socket.setSoTimeout(4500);
                     byte[] reply = new byte[128];
                     DatagramPacket response = new DatagramPacket(reply, reply.length);
@@ -74,8 +82,12 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                 Log.i("NexaLinkVPN", "Test APK UID sent routed UDP probe");
                 }
             } catch (Exception failure) {
-                result.putString("error", failure.getClass().getSimpleName());
-                Log.w("NexaLinkVPN", "Test APK UID probe failed: " + failure.getClass().getSimpleName());
+                int errno = 0;
+                for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+                    if (cause instanceof ErrnoException) { errno = ((ErrnoException) cause).errno; break; }
+                }
+                result.putString("error", phase + ":" + failure.getClass().getSimpleName() + ":errno=" + errno);
+                Log.w("NexaLinkVPN", "Test APK UID probe failed at " + phase + ": " + failure.getClass().getSimpleName() + ", errno=" + errno);
             } finally {
                 pending.setResultExtras(result);
                 pending.finish();
