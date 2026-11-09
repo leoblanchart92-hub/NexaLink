@@ -18,8 +18,10 @@ for ((attempt=1; attempt<=${NEXALINK_ATTEMPTS:-3}; attempt++)); do
   if [ -n "${NEXALINK_TEST_ABI:-}" ]; then
     args+=("-PnexalinkTestAbi=${NEXALINK_TEST_ABI}" "-Pandroid.testInstrumentationRunnerArguments.expectedGoArch=${NEXALINK_GO_ARCH}")
   fi
-  timeout "${NEXALINK_TEST_TIMEOUT:-420}" ./gradlew :app:connectedDebugAndroidTest "${args[@]}" 2>&1 | tee "${diagnostics}/gradle-${attempt}.log"
-  status=${PIPESTATUS[0]}
+  # Avoid a tee pipe held open by a surviving Gradle/adb child after timeout.
+  timeout --kill-after=10 "${NEXALINK_TEST_TIMEOUT:-420}" ./gradlew :app:connectedDebugAndroidTest "${args[@]}" > "${diagnostics}/gradle-${attempt}.log" 2>&1
+  status=$?
+  cat "${diagnostics}/gradle-${attempt}.log"
   if [ "${NEXALINK_CYCLE_TEST:-0}" = 1 ]; then
     adb exec-out run-as com.nexalink.app cat files/phase81-cycles.jsonl > "${diagnostics}/cycles.jsonl" 2> "${diagnostics}/cycles-pull.err"
     adb logcat -d -v raw -s NexaLinkCycle:I '*:S' > "${diagnostics}/cycles-logcat.log" 2>&1
