@@ -26,6 +26,12 @@ summary = {
     "bound_echo": sum(r.get("bound", {}).get("echo") is True for r in rows),
     "default_failed_bound_succeeded": sum(r.get("default", {}).get("echo") is False and r.get("bound", {}).get("echo") is True for r in rows),
     "orders": collections.Counter(r.get("order", "unavailable") for r in rows),
+    "first_failed_second_succeeded": sum(
+        r.get(r.get("order", "").split(",")[0], {}).get("echo") is False and
+        r.get(r.get("order", ",").split(",")[-1], {}).get("echo") is True for r in rows),
+    "first_succeeded_second_failed": sum(
+        r.get(r.get("order", "").split(",")[0], {}).get("echo") is True and
+        r.get(r.get("order", ",").split(",")[-1], {}).get("echo") is False for r in rows),
 }
 def notice(title, obj):
     data = json.dumps(obj, separators=(",", ":"), ensure_ascii=True).encode()
@@ -49,7 +55,8 @@ if len(sys.argv) > 3:
                                      "wire_datagram_cycle_attribution": "unavailable"})
 # Compact examples fit GitHub annotation limits; complete records remain in the artifact.
 for kind, predicate in (("SUCCESS", lambda r: not r.get("errors")),
-                        ("FAILURE", lambda r: bool(r.get("errors")))):
+                        ("DEFAULT_FAILURE", lambda r: r.get("default", {}).get("echo") is False),
+                        ("BOUND_FAILURE", lambda r: r.get("bound", {}).get("echo") is False)):
     row = next((r for r in rows if predicate(r)), None)
     if row is None: continue
     keys = ("uid", "pid", "thread", "localPort", "localPortAfterSend", "socketLocalOnCreate", "socketLocalAfterSend", "remote", "activeBefore", "activeAtCreate", "activeAtSend", "activeAfter", "networkEvents", "socketCreateElapsedMs", "sentElapsedMs", "finishedElapsedMs", "sent", "echo", "boundVpn", "error", "wgTxBefore", "wgRxBefore", "wgTxAfter", "wgRxAfter", "handshakeMillis")
