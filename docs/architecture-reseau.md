@@ -479,3 +479,53 @@ et la série longue est alors conditionnée au succès des étapes précédentes
 Les résultats bruts et logs du pair vont dans l'artifact de diagnostic ; les
 annotations résument les enregistrements et n'effacent aucun échec. Une absence
 de 30 identifiants distincts est un échec, pas une preuve de stabilité.
+
+### Résultats de reproduction courte
+
+Le [run 42779305135](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42779305135)
+(`0f846103fc5cb65069891749e3d49d28795dc9fa`) a reproduit des assertions
+échouées sur les deux émulateurs : 4 cycles en échec sur Android 10 et 7 sur
+Android 15, selon JUnit. Cependant plusieurs lignes JSON ont été tronquées par
+la limite logcat : le résumé n'a reconstitué que 20/30 et 9/30 enregistrements
+respectivement. Il ne faut pas en déduire que les autres cycles ont réussi.
+`866a2ba` découpe les enregistrements en fragments numérotés et rejette les
+fragments absents, dupliqués ou invalides ; les traces brutes du run initial
+restent dans son artifact.
+
+Le [run 42781884747](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42781884747)
+(`866a2babd9d631256025a918f70cbb4528af4d3e`) est globalement en échec,
+mais a reconstitué 30/30 lignes sur chaque émulateur, sans erreur de parsing :
+
+| Émulateur | Écho implicite | Écho lié VPN | Cycles avec échec |
+|---|---:|---:|---:|
+| Android 10 x86_64 | 27/30 | 28/30 | 5/30 |
+| Android 15 x86_64 | 27/30 | 26/30 | 7/30 |
+
+Sur Android 10, le cycle 0 montre la sonde implicite réussie (UID 10135,
+port local 60685, `tx=228 rx=172`) puis la sonde liée réussie ; le pair a
+observé pour chacune écriture TUN mémoire, UDP déchiffré, envoi de l'écho et
+lecture du TUN mémoire. Au cycle 6, toujours UID 10135, la première sonde
+implicite envoie depuis le port 38711 mais expire avec `tx=0 rx=0` et sans
+handshake ; aucun événement déchiffré du pair ne porte son identifiant `006:A`.
+La seconde sonde, port 56917 liée au même handle VPN, reçoit l'écho ; son
+identifiant `006:B` est observé aux quatre étapes du pair. Le service est alors
+`DOWN`, non listé, et le bail libéré. Cela ne permet pas de localiser la perte
+à l'intérieur du TUN Android ou du backend WireGuard.
+
+L'ordre inverse est important : sur Android 15, cycle 5, la sonde **liée envoyée
+la première échoue** avec `tx=0 rx=0`, puis la sonde **implicite réussit**.
+Ceci invalide l'hypothèse que la liaison explicite suffit à corriger le défaut.
+La notification `onAvailable` du VPN pour la première sonde du cycle 5 apparaît
+après l'envoi ; au cycle 6 Android 10 elle apparaît aussi après l'envoi. Ces
+observations suggèrent une transition asynchrone à étudier, mais ne prouvent pas
+qu'elle cause la perte : le callback de diagnostic et les deux sondes ont leurs
+propres files d'exécution, et la seconde sonde diffère aussi par son horaire et
+son port. Les logs pair chiffrés ne sont pas attribuables individuellement aux
+cycles. Aucune correction réseau ni temporisation arbitraire n'a été ajoutée.
+
+Dans ce run, backend, Go `-race` Linux x86_64 et ARM64 natif, Flutter, Kotlin,
+APK, suites JNI cœur/propriétaire, ancien test invité, perte/retour réseau et
+Android 6 de base réussissent ; les séries courtes échouent. Android 6 ignore
+les tests VPN conditionnés par l'API ; aucun ARM Android traduit ou physique
+n'a été testé. La série de 100 cycles n'a pas été relancée. [Diagnostics](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42781884747/artifacts/13747790248)
+et [APK de développement](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42781884747/artifacts/13746521769).
