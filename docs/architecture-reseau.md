@@ -529,3 +529,26 @@ Android 6 de base réussissent ; les séries courtes échouent. Android 6 ignore
 les tests VPN conditionnés par l'API ; aucun ARM Android traduit ou physique
 n'a été testé. La série de 100 cycles n'a pas été relancée. [Diagnostics](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42781884747/artifacts/13747790248)
 et [APK de développement](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42781884747/artifacts/13746521769).
+
+Le [run 42784218344](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42784218344)
+teste `89042f91a16f0493978879cbffa814e09f5220d8` ; il est aussi en échec.
+Les 30 enregistrements par émulateur sont reconstitués, sans ligne malformée.
+Android 10 : 28/30 échos implicites, 26/30 liés, 6 cycles en échec. Android 15 :
+26/30 implicites, 25/30 liés, 9 cycles en échec. Dans chacun de ces 15 cycles
+en échec, **la première sonde échoue et la seconde réussit**, indépendamment
+du mode de liaison ; aucun cas inverse n'est observé dans ce run. Ce résultat
+est une corrélation expérimentale, pas la preuve que le délai, le callback,
+le port, la création de la socket ou une autre transition est la cause.
+
+Par exemple, sur Android 10 cycle 3, la sonde liée part à `151179` ms avant
+l'événement callback VPN horodaté `151239` ms, expire avec `tx=0 rx=0`, puis
+la sonde implicite émise à `155714` ms reçoit l'écho. Sur Android 15 cycle 1,
+la sonde liée part à `110297` ms avant l'événement callback VPN `110328` ms,
+expire avec `tx=0 rx=0`, puis la sonde implicite émise à `114811` ms reçoit
+l'écho. Dans les deux cas les lectures synchrones `getActiveNetwork` de la
+sonde montrent déjà un VPN à la création et à l'envoi. Les callbacks sont
+asynchrones et soumis à leur propre ordonnancement ; ces seules observations ne
+prouvent ni l'état de la route au moment du `send`, ni le point exact de perte.
+Les exemples complets, les autres résultats et les erreurs sont dans les
+[diagnostics](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42784218344/artifacts/13749862007).
+[APK de développement](https://github.com/leoblanchart92-hub/NexaLink/actions/runs/42784218344/artifacts/13748446404).
