@@ -52,7 +52,7 @@ class GuestCycleInstrumentedTest {
         return ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes().toString(Charsets.UTF_8).trim() }
     }
 
-    private fun probe(cycle: Int, inspect: Boolean = false, stopped: Boolean = false, bound: Boolean = false): Bundle {
+    private fun probe(cycle: Int, inspect: Boolean = false, stopped: Boolean = false, bound: Boolean = false, variant: String? = null): Bundle {
         val done = CountDownLatch(1)
         var result: Bundle? = null
         val receiver = object : BroadcastReceiver() {
@@ -63,7 +63,7 @@ class GuestCycleInstrumentedTest {
         }
         val intent = Intent().setClassName(inst.context.packageName, "com.nexalink.app.network.VpnProbeReceiver")
             .putExtra("cycle", cycle).putExtra("inspectOnly", inspect).putExtra("expectStopped", stopped)
-            .putExtra("expectEcho", !inspect && !stopped).putExtra("bindVpn", bound)
+            .putExtra("expectEcho", !inspect && !stopped).putExtra("bindVpn", bound).putExtra("probeVariant", variant)
         context.sendOrderedBroadcast(intent, null, receiver, Handler(Looper.getMainLooper()), 0, null, null)
         if (!done.await(12, TimeUnit.SECONDS)) return Bundle().apply { putString("error", "broadcast-timeout") }
         return result ?: Bundle().apply { putString("error", "empty-broadcast-result") }
@@ -142,11 +142,15 @@ class GuestCycleInstrumentedTest {
     }
 
     private fun recordProbe(b: Bundle): JSONObject = JSONObject().apply {
-        for (k in listOf("uid", "localPort", "sentBytes", "receivedBytes")) put(k, b.getInt(k, -1))
-        for (k in listOf("networkHandle", "startedElapsedMs", "sentElapsedMs", "receivedElapsedMs", "finishedElapsedMs")) put(k, b.getLong(k, -1))
+        for (k in listOf("uid", "pid", "localPort", "localPortAfterSend", "sentBytes", "receivedBytes")) put(k, b.getInt(k, -1))
+        for (k in listOf("networkHandle", "startedElapsedMs", "sentElapsedMs", "receivedElapsedMs", "finishedElapsedMs", "socketCreateElapsedMs")) put(k, b.getLong(k, -1))
         for (k in listOf("sent", "echo", "vpnReady", "vpnGone", "boundVpn")) put(k, b.getBoolean(k, false))
         put("interfaceName", b.getString("interfaceName", "unavailable"))
         put("error", b.getString("error", "none"))
+        for (k in listOf("thread", "activeBefore", "activeAtCreate", "activeAtSend", "activeAfter", "networkEvents", "callbackError", "callbackUnregisterError", "socketLocalOnCreate", "socketLocalAfterSend", "remote", "variant")) {
+            put(k, b.getString(k, "unavailable"))
+        }
+        put("socketConnected", b.getBoolean("socketConnected", false))
     }
 
     // A stuck native call makes the process unsafe to reuse. Bound the wait,
@@ -214,6 +218,92 @@ class GuestCycleInstrumentedTest {
             shell("svc wifi enable")
             try { guest.stop() } finally { shell("appops set ${context.packageName} ACTIVATE_VPN ignore") }
         }
+    }
+
+    /** Thirty genuine restarts, with two separate sockets in alternating order.
+     * Binding is a differential control only; it cannot erase a baseline failure.
+     * Upstream libwg-go is opaque: do not label byte totals as TUN-read counters.
+     */
+    @Test(timeout = 600000) fun shortDifferentialCycles() {
+        assumeTrue(Build.VERSION.SDK_INT >= 29)
+        assertFalse("previous cleanup uncertain", cleanupUncertain)
+        shell("appops set ${context.packageName} ACTIVATE_VPN allow")
+        assertNull(VpnService.prepare(context))
+        val guestKey = KeyPair(Key.fromBase64("YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="))
+        val ownerKey = KeyPair(Key.fromBase64("YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="))
+        val config = Config.Builder().setInterface(Interface.Builder().setKeyPair(guestKey)
+            .addAddress(InetNetwork.parse("10.77.0.2/32")).setMtu(1280).build())
+            .addPeer(Peer.Builder().setPublicKey(ownerKey.publicKey)
+                .setEndpoint(InetEndpoint.parse("10.0.2.2:38673"))
+                .addAllowedIp(InetNetwork.parse("0.0.0.0/0")).build()).build()
+        val reused = GuestTunnel(context)
+        var failures = 0
+        var completed = 0
+        try {
+            for (cycle in 0 until 30) {
+                val guest = if (cycle < 15) reused else GuestTunnel(context)
+                val row = JSONObject().put("cycle", cycle).put("mode", if (cycle < 15) "reused" else "fresh")
+                    .put("startElapsedMs", SystemClock.elapsedRealtime())
+                val errors = mutableListOf<String>()
+                var uncertain = false
+                try {
+                    val before = probe(cycle, stopped = true)
+                    row.put("before", recordProbe(before))
+                    check(before.getBoolean("vpnGone")) { "prior VPN still visible" }
+                    check(lifecycleCall { guest.start(config) } == Tunnel.State.UP) { "start did not return UP" }
+                    row.put("serviceAfterStart", serviceRunning())
+                    row.put("vpnStartedElapsedMs", SystemClock.elapsedRealtime())
+                    val order = if (cycle % 2 == 0) listOf(false, true) else listOf(true, false)
+                    row.put("order", if (order[0]) "bound,default" else "default,bound")
+                    for (bound in order) {
+                        val name = if (bound) "bound" else "default"
+                        val beforeStats = lifecycleCall { guest.statistics() }
+                        val txBefore = beforeStats.totalTx(); val rxBefore = beforeStats.totalRx()
+                        val result = probe(cycle, bound = bound, variant = if (bound) "B" else "A")
+                        val afterStats = lifecycleCall { guest.statistics() }
+                        val sample = recordProbe(result).put("wgTxBefore", txBefore).put("wgRxBefore", rxBefore)
+                            .put("wgTxAfter", afterStats.totalTx()).put("wgRxAfter", afterStats.totalRx())
+                            .put("handshakeMillis", afterStats.peer(ownerKey.publicKey)?.latestHandshakeEpochMillis() ?: 0L)
+                        row.put(name, sample)
+                        if (result.getInt("uid", -1) < 0 || result.getInt("uid", -1) == Process.myUid()) errors.add("$name-uid")
+                        if (!result.getBoolean("sent")) errors.add("$name-send")
+                        if (!result.getBoolean("echo")) errors.add("$name-echo")
+                    }
+                    // No application-level hooks exist in the upstream Android AAR.
+                    row.put("androidTunRead", "unavailable-upstream-aar")
+                        .put("androidWgDatagramSend", "unavailable-upstream-aar")
+                        .put("androidWgDatagramReceive", "unavailable-upstream-aar")
+                        .put("androidDecrypt", "unavailable-upstream-aar")
+                        .put("androidTunWrite", "unavailable-upstream-aar")
+                        .put("soMark", "unavailable-not-a-validation-condition")
+                } catch (e: TimeoutException) {
+                    errors.add("lifecycle-timeout"); uncertain = true
+                } catch (e: Exception) {
+                    errors.add("exception:${e.javaClass.simpleName}")
+                } finally {
+                    try {
+                        if (uncertain) throw IllegalStateException("lifecycle uncertain")
+                        val state = lifecycleCall { guest.stop() }
+                        row.put("stopState", state.toString()).put("serviceAfterStop", serviceRunning())
+                        val after = probe(cycle, stopped = true)
+                        row.put("after", recordProbe(after))
+                        if (state != Tunnel.State.DOWN || serviceRunning() || !after.getBoolean("vpnGone")) {
+                            errors.add("cleanup"); uncertain = true
+                        }
+                        val marker = Any(); val released = VpnRoleLease.acquire(marker)
+                        if (released) VpnRoleLease.release(marker) else { errors.add("lease"); uncertain = true }
+                        row.put("leaseReleased", released)
+                    } catch (e: Exception) { errors.add("stop:${e.javaClass.simpleName}"); uncertain = true }
+                    row.put("endElapsedMs", SystemClock.elapsedRealtime()).put("errors", errors.joinToString(","))
+                    android.util.Log.i("NexaLinkShort", "RECORD=$row")
+                    completed++
+                    if (errors.isNotEmpty()) failures++
+                }
+                if (uncertain) { cleanupUncertain = true; break }
+            }
+        } finally { shell("appops set ${context.packageName} ACTIVATE_VPN ignore") }
+        assertEquals("all short diagnostic cycles must be recorded", 30, completed)
+        assertEquals("baseline and differential probes must succeed without retries", 0, failures)
     }
 
     @Test(timeout = 2400000) fun oneHundredRealGuestCycles() {

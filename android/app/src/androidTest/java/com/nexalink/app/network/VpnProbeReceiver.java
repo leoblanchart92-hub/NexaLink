@@ -11,6 +11,10 @@ import android.net.RouteInfo;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.os.Process;
+import android.os.Build;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import android.system.ErrnoException;
 import android.util.Log;
 import java.net.DatagramPacket;
@@ -19,11 +23,38 @@ import java.net.InetAddress;
 
 /** Standalone test APK process: deliberately has no Kotlin or app dependencies. */
 public final class VpnProbeReceiver extends BroadcastReceiver {
+    private static String describeActive(ConnectivityManager cm) {
+        try {
+            Network network = cm.getActiveNetwork();
+            if (network == null) return "none";
+            NetworkCapabilities caps = cm.getNetworkCapabilities(network);
+            LinkProperties links = cm.getLinkProperties(network);
+            return network.getNetworkHandle() + ":vpn=" + (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) +
+                    ":interface=" + (links == null ? "unavailable" : links.getInterfaceName());
+        } catch (Exception e) { return "unavailable:" + e.getClass().getSimpleName(); }
+    }
     @Override public void onReceive(Context context, Intent intent) {
         final PendingResult pending = goAsync();
         new Thread(() -> {
             Bundle result = new Bundle();
             result.putInt("uid", Process.myUid());
+            result.putInt("pid", Process.myPid());
+            result.putString("thread", Thread.currentThread().getName());
+            final ConnectivityManager observer = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            final List<String> events = Collections.synchronizedList(new ArrayList<>());
+            ConnectivityManager.NetworkCallback callback = new ConnectivityManager.NetworkCallback() {
+                private void event(String kind, Network n) {
+                    synchronized (events) { if (events.size() < 24) events.add(kind + ":" + n.getNetworkHandle() + ":" + SystemClock.elapsedRealtime()); }
+                }
+                @Override public void onAvailable(Network n) { event("available", n); }
+                @Override public void onLost(Network n) { event("lost", n); }
+            };
+            boolean callbackRegistered = false;
+            result.putString("activeBefore", describeActive(observer));
+            if (Build.VERSION.SDK_INT >= 24) {
+                try { observer.registerDefaultNetworkCallback(callback); callbackRegistered = true; }
+                catch (Exception e) { result.putString("callbackError", e.getClass().getSimpleName()); }
+            }
             result.putLong("startedElapsedMs", SystemClock.elapsedRealtime());
             String phase = "network";
             try {
@@ -66,7 +97,11 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                 }
                 if (intent.getBooleanExtra("inspectOnly", false)) return;
                 phase = "socket";
+                result.putLong("socketCreateElapsedMs", SystemClock.elapsedRealtime());
                 try (DatagramSocket socket = new DatagramSocket()) {
+                result.putString("socketLocalOnCreate", socket.getLocalAddress().getHostAddress());
+                result.putBoolean("socketConnected", socket.isConnected());
+                result.putString("activeAtCreate", describeActive(observer));
                 if (intent.getBooleanExtra("bindVpn", false)) {
                     phase = "bind";
                     ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -77,12 +112,19 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                     result.putBoolean("boundVpn", true);
                 }
                 int cycle = intent.getIntExtra("cycle", -1);
-                byte[] bytes = cycle < 0 ? new byte[]{1, 2, 3} :
-                        String.format(java.util.Locale.ROOT, "cycle:%03d", cycle).getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                String variant = intent.getStringExtra("probeVariant");
+                String payload = String.format(java.util.Locale.ROOT, "cycle:%03d", cycle);
+                if ("A".equals(variant) || "B".equals(variant)) payload += ":" + variant;
+                byte[] bytes = cycle < 0 ? new byte[]{1, 2, 3} : payload.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                result.putString("variant", variant == null ? "legacy" : variant);
                 result.putInt("localPort", socket.getLocalPort());
+                result.putString("remote", "198.18.0.1:5555");
+                result.putString("activeAtSend", describeActive(observer));
                 phase = "send";
                 socket.send(new DatagramPacket(bytes, bytes.length,
                         InetAddress.getByName("198.18.0.1"), 5555));
+                result.putString("socketLocalAfterSend", socket.getLocalAddress().getHostAddress());
+                result.putInt("localPortAfterSend", socket.getLocalPort());
                 result.putBoolean("sent", true);
                 result.putInt("sentBytes", bytes.length);
                 result.putLong("sentElapsedMs", SystemClock.elapsedRealtime());
@@ -109,6 +151,12 @@ public final class VpnProbeReceiver extends BroadcastReceiver {
                 result.putString("error", phase + ":" + failure.getClass().getSimpleName() + ":errno=" + errno);
                 Log.w("NexaLinkVPN", "Test APK UID probe failed at " + phase + ": " + failure.getClass().getSimpleName() + ", errno=" + errno);
             } finally {
+                result.putString("activeAfter", describeActive(observer));
+                if (callbackRegistered) {
+                    try { observer.unregisterNetworkCallback(callback); }
+                    catch (Exception e) { result.putString("callbackUnregisterError", e.getClass().getSimpleName()); }
+                }
+                synchronized (events) { result.putString("networkEvents", String.join(",", events)); }
                 result.putLong("finishedElapsedMs", SystemClock.elapsedRealtime());
                 pending.setResultExtras(result);
                 pending.finish();

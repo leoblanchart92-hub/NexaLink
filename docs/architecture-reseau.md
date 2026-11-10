@@ -420,3 +420,62 @@ Résultats confirmés, **pas une validation des 100 cycles** :
 Le SIGSEGV historique et les limites de la section précédente restent ouverts.
 Aucun essai sur Android ARM natif ou téléphone physique et aucun partage
 Internet réel ne sont démontrés par ces séries x86_64.
+
+## Phase 8.2 — protocole différentiel, sans correction supposée
+
+Les deux sondes historiques sont créées par `VpnProbeReceiver` dans le processus
+et sous l'UID de l'APK de test (différent de l'UID de l'application VPN). Chaque
+broadcast ordonné lance son propre thread `vpn-test-probe`, qui crée un nouveau
+`DatagramSocket()` après observation d'un réseau actif VPN avec une route vers
+`198.18.0.1`. Le constructeur lie localement la socket à un port éphémère ; la
+socket UDP n'est pas connectée, envoie à `198.18.0.1:5555`, attend l'écho
+jusqu'à 4,5 s et est fermée par `try-with-resources`. Ni l'une ni l'autre ne
+sont protégées par `VpnService.protect` : elles sont censées entrer dans le VPN.
+La première utilise la sélection implicite du réseau ; la seconde vérifie le
+handle VPN puis appelle `Network.bindSocket(socket)` avant l'envoi. Dans les
+anciens essais, la seconde ne démarrait qu'après un timeout et utilisait donc
+une autre socket, un autre port et un moment différent : son succès n'identifie
+pas à lui seul l'effet de la liaison ou la cause de la perte.
+
+Ceci est distinct des sockets UDP **externes** du tunnel WireGuard. Dans
+l'AAR amont `1.0.20230706`, `GoBackend` établit le TUN et appelle `wgTurnOn`,
+puis `VpnService.protect` sur les deux FD UDP du backend ; il n'en vérifie pas
+les booléens. Il appelle `setUnderlyingNetworks(null)` et ne lie pas ces FD à
+un `Network` explicite dans ce chemin Java. Le détail de connect/send interne
+est dans le code natif de l'AAR. La protection vise à éviter une boucle dans le
+VPN ; elle n'est pas la liaison de la sonde au VPN. Le code propriétaire
+séparé protège puis lie ses sockets à un réseau cellulaire, mais n'est pas le
+trajet invité étudié ici. Aucune modification de routage n'est proposée sans
+preuve. Le SIGSEGV et l'exclusion des deux runtimes Go restent séparés.
+
+Le nouveau test court effectue 30 cycles maximum, 15 par objet réutilisé puis
+15 par objets neufs. Il envoie une sonde non liée et une autre liée par cycle,
+en alternant leur ordre, et conserve chaque échec. Les deux échanges ont des
+suffixes de test `A`/`B` pour corréler les paquets déchiffrés du pair ; le
+second échange peut toutefois bénéficier d'un handshake établi par le premier,
+et l'ordre, le temps et le port restent des variables. L'état du réseau actif,
+les notifications `NetworkCallback`, les adresses/ports observables, l'UID, le
+PID, les horaires et les statistiques WireGuard avant/après chaque sonde sont
+consignés. L'enregistrement du callback est lui-même une instrumentation et
+peut modifier les timings ; il ne prouve pas une route effective.
+
+Le pair de test ajoute des compteurs à ses frontières TUN mémoire et socket UDP.
+Un identifiant ne peut être associé aux paquets WireGuard chiffrés avant leur
+déchiffrement : leurs événements portent `cycle=unavailable`. Les événements
+TUN du pair corrèlent uniquement les charges de test reconnues, sans journaliser
+les clés. Ces observations ne sont **pas** des compteurs du TUN Android. L'AAR
+WireGuard Android précompilé n'expose pas de points d'instrumentation pour sa
+lecture TUN, son émission/réception socket, son déchiffrement ou sa réinjection
+TUN : ces valeurs sont explicitement `unavailable-upstream-aar`, pas zéro. La
+mesure directe à ces points nécessiterait un backend instrumenté distinct,
+construit et validé sans charger deux runtimes Go incompatibles ; elle n'est pas
+implémentée ici. `SO_MARK` n'est pas une condition de réussite. Les statistiques
+utilisées sont locales, et les appels de cycle sont bornés ; aucun shell n'est
+utilisé pour lire des compteurs TUN.
+
+Les séries de 100 cycles sont désactivées par défaut dans la CI. Une exécution
+manuelle explicite reste possible après examen de la stabilité des essais courts,
+et la série longue est alors conditionnée au succès des étapes précédentes.
+Les résultats bruts et logs du pair vont dans l'artifact de diagnostic ; les
+annotations résument les enregistrements et n'effacent aucun échec. Une absence
+de 30 identifiants distincts est un échec, pas une preuve de stabilité.

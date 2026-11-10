@@ -8,7 +8,7 @@ status=0
 for ((attempt=1; attempt<=${NEXALINK_ATTEMPTS:-3}; attempt++)); do
   echo "Android instrumentation attempt $attempt/${NEXALINK_ATTEMPTS:-3}"
   adb logcat -c
-  if [ "${NEXALINK_CYCLE_TEST:-0}" = 1 ]; then adb logcat -G 16M 2>/dev/null || true; fi
+  if [ "${NEXALINK_CYCLE_TEST:-0}" = 1 ] || [[ "${NEXALINK_TEST_CLASS:-}" == *shortDifferentialCycles* ]]; then adb logcat -G 16M 2>/dev/null || true; fi
   args=()
   if [ -n "${NEXALINK_TEST_CLASS:-}" ]; then
     args+=("-Pandroid.testInstrumentationRunnerArguments.class=${NEXALINK_TEST_CLASS}")

@@ -4,6 +4,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      run_long_cycles:
+        description: 'Run 100-cycle series only after short diagnostics are stable'
+        type: boolean
+        default: false
       translated_arm:
         description: 'Optional diagnostic: retry known-failing ARM translation'
         type: boolean
@@ -138,6 +142,8 @@ jobs:
       - name: Test JNI sur émulateur Android
         timeout-minutes: 125
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          NEXALINK_RUN_LONG_CYCLES: ${{ github.event_name == 'workflow_dispatch' && inputs.run_long_cycles && '1' || '0' }}
         with:
           api-level: 29
           arch: x86_64
@@ -151,6 +157,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         env:
           NEXALINK_DIAGNOSTIC_LABEL: android-35-x86_64
+          NEXALINK_RUN_LONG_CYCLES: ${{ github.event_name == 'workflow_dispatch' && inputs.run_long_cycles && '1' || '0' }}
         with:
           api-level: 35
           arch: x86_64

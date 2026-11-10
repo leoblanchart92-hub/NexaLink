@@ -31,9 +31,23 @@ for role in Guest Owner; do
     echo "::notice title=TEST_PEER_${base}::$(tail -c 1800 "$fixture_log" | base64 -w0)"
   fi
 done
-# Run the 100-cycle test once on supported x86_64 emulators, preserving every failure.
+# Default to a short, paired differential test; never silently launch 100 cycles.
 if [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -ge 29 ]; then
-  NEXALINK_DIAGNOSTIC_LABEL="${base}-cycles" NEXALINK_TEST_CLASS='com.nexalink.app.network.GuestCycleInstrumentedTest' \
+  NEXALINK_DIAGNOSTIC_LABEL="${base}-short" \
+  NEXALINK_TEST_CLASS='com.nexalink.app.network.GuestCycleInstrumentedTest#shortDifferentialCycles' \
+  NEXALINK_ATTEMPTS=1 NEXALINK_TEST_TIMEOUT=650 \
+    bash .github/scripts/android-instrumented-test.sh || status=1
+  adb logcat -d -v raw -s NexaLinkShort:I '*:S' > "test-diagnostics/${base}-short-logcat.log" 2>&1
+  sed -n 's/^RECORD=//p' "test-diagnostics/${base}-short-logcat.log" > "test-diagnostics/${base}-short.jsonl"
+  python3 .github/scripts/summarize-short-cycles.py "test-diagnostics/${base}-short.jsonl" "$base" || status=1
+  NEXALINK_DIAGNOSTIC_LABEL="${base}-network-loss" \
+  NEXALINK_TEST_CLASS='com.nexalink.app.network.GuestCycleInstrumentedTest#zGuestNetworkLossAndReturn' \
+  NEXALINK_ATTEMPTS=1 NEXALINK_TEST_TIMEOUT=180 \
+    bash .github/scripts/android-instrumented-test.sh || status=1
+  # opt-in is only for a separately reviewed follow-up after stability has been established.
+fi
+if [ "${NEXALINK_RUN_LONG_CYCLES:-0}" = 1 ] && [ "$status" = 0 ] && [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -ge 29 ]; then
+  NEXALINK_DIAGNOSTIC_LABEL="${base}-cycles" NEXALINK_TEST_CLASS='com.nexalink.app.network.GuestCycleInstrumentedTest#oneHundredRealGuestCycles' \
   NEXALINK_ATTEMPTS=1 NEXALINK_TEST_TIMEOUT=2700 NEXALINK_CYCLE_TEST=1 \
     bash .github/scripts/android-instrumented-test.sh || status=1
 fi
