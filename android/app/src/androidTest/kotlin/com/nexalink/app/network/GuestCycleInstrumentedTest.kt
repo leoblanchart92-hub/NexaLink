@@ -295,7 +295,13 @@ class GuestCycleInstrumentedTest {
                         row.put("leaseReleased", released)
                     } catch (e: Exception) { errors.add("stop:${e.javaClass.simpleName}"); uncertain = true }
                     row.put("endElapsedMs", SystemClock.elapsedRealtime()).put("errors", errors.joinToString(","))
-                    android.util.Log.i("NexaLinkShort", "RECORD=$row")
+                    // Android log entries have a size limit. Chunk rather than
+                    // silently truncating failures or relying on a shell pipe.
+                    val text = row.toString()
+                    val parts = text.chunked(1000)
+                    parts.forEachIndexed { index, part ->
+                        android.util.Log.i("NexaLinkShort", "PART=$cycle:$index/${parts.size}:$part")
+                    }
                     completed++
                     if (errors.isNotEmpty()) failures++
                 }
