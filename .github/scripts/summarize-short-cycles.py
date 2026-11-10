@@ -3,6 +3,7 @@
 import base64
 import collections
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -30,6 +31,22 @@ def notice(title, obj):
     data = json.dumps(obj, separators=(",", ":"), ensure_ascii=True).encode()
     print(f'::notice title={title}::{base64.b64encode(data).decode()}')
 notice(f'PHASE82_SUMMARY_{label}', summary)
+if len(sys.argv) > 3:
+    # This is a loopback fixture's complete append-only log, NOT an observation
+    # at the Android TUN. Ciphertext packets cannot be attributed to a cycle.
+    peer = collections.defaultdict(collections.Counter)
+    for line in Path(sys.argv[3]).read_text(errors="replace").splitlines():
+        match = re.search(r'peer (tun write|tun read|decrypted UDP|echo sent) cycle=(\d{3}:[AB])(?: |$)', line)
+        if match: peer[match.group(2)][match.group(1)] += 1
+    cases = []
+    for outcome in (False, True):
+        row = next((r for r in rows if r.get("default", {}).get("echo") is outcome), None)
+        if row is not None:
+            ident = f'{row["cycle"]:03d}'
+            cases.append({"cycle": row["cycle"], "default_echo": outcome,
+                          "peer_default": peer[ident + ":A"], "peer_bound": peer[ident + ":B"]})
+    notice(f'PHASE82_PEER_{label}', {"cases": cases, "peer_cycle_ids_observed": len(peer),
+                                     "wire_datagram_cycle_attribution": "unavailable"})
 # Compact examples fit GitHub annotation limits; complete records remain in the artifact.
 for kind, predicate in (("SUCCESS", lambda r: not r.get("errors")),
                         ("FAILURE", lambda r: bool(r.get("errors")))):

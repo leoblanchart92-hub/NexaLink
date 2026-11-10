@@ -39,7 +39,7 @@ if [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -ge 29 ]; then
     bash .github/scripts/android-instrumented-test.sh || status=1
   adb logcat -d -v raw -s NexaLinkShort:I '*:S' > "test-diagnostics/${base}-short-logcat.log" 2>&1
   sed -n 's/^RECORD=//p' "test-diagnostics/${base}-short-logcat.log" > "test-diagnostics/${base}-short.jsonl"
-  python3 .github/scripts/summarize-short-cycles.py "test-diagnostics/${base}-short.jsonl" "$base" || status=1
+  python3 .github/scripts/summarize-short-cycles.py "test-diagnostics/${base}-short.jsonl" "$base" "$fixture_log" || status=1
   NEXALINK_DIAGNOSTIC_LABEL="${base}-network-loss" \
   NEXALINK_TEST_CLASS='com.nexalink.app.network.GuestCycleInstrumentedTest#zGuestNetworkLossAndReturn' \
   NEXALINK_ATTEMPTS=1 NEXALINK_TEST_TIMEOUT=180 \
