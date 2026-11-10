@@ -32,12 +32,14 @@ for failed in (False,True):
     v={k:r.get(k) for k in fields}
     for name in ('before','networkAfterStart','firstProbe','after'):
         sample=r.get(name,{})
-        v[name]={k:sample.get(k) for k in ('networkHandle','vpnReady','vpnGone','sent','echo','startedElapsedMs','sentElapsedMs','receivedElapsedMs','finishedElapsedMs','error')}
+        fields = ('networkHandle','vpnReady','vpnGone','sent','echo','sentElapsedMs','receivedElapsedMs','error')
+        v[name]={k:sample.get(k) for k in fields}
     result['examples'].append(v)
 encoded=base64.b64encode(json.dumps(result,separators=(',',':')).encode()).decode()
 # Keep concise annotations; full JSONL and logs remain in the diagnostics artifact.
 if len(encoded)>3900:
-    result['examples']=result['examples'][:1]
+    # Preserve the failure example preferentially if GitHub's notice limit is hit.
+    result['examples']=result['examples'][-1:]
     encoded=base64.b64encode(json.dumps(result,separators=(',',':')).encode()).decode()
 print(f'::notice title=PHASE83_LIFECYCLE_{sys.argv[2]}::{encoded}')
 if not complete or errors: sys.exit(1)
