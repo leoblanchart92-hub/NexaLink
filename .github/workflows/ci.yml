@@ -65,6 +65,19 @@ jobs:
           test "$(uname -m)" = aarch64
           test "$(go env GOARCH)" = arm64
           go test -race -v -timeout 120s ./...
+  wireguard-provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare published WireGuard AAR sources and upstream tag
+        run: python3 .github/scripts/audit-wireguard-aar.py published
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: NexaLink-wireguard-provenance
+          path: test-diagnostics/wireguard-published-provenance.json
+          if-no-files-found: warn
+          retention-days: 14
   android:
     runs-on: ubuntu-latest
     steps:
@@ -127,6 +140,8 @@ jobs:
         run: python3 .github/scripts/check-android-abis.py
       - name: Analyser ABI et symboles des bibliothèques natives
         run: python3 .github/scripts/inspect-native-libraries.py
+      - name: Auditer le WireGuard AAR résolu
+        run: python3 .github/scripts/audit-wireguard-aar.py resolved
       - uses: actions/upload-artifact@v4
         with:
           name: NexaLink-android-development-apk

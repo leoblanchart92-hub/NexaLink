@@ -98,7 +98,7 @@ class GuestCycleInstrumentedTest {
     }
     // Reflection is confined to instrumentation. It never changes a socket or
     // calls protect: upstream GoBackend does not expose protect's return value.
-    private fun wireGuardSockets(guest: GuestTunnel): JSONObject {
+    private fun wireGuardSockets(guest: GuestTunnel, inspectMark: Boolean = true): JSONObject {
         val result = JSONObject()
         try {
             val field = GuestTunnel::class.java.getDeclaredField("backend").apply { isAccessible = true }
@@ -114,7 +114,7 @@ class GuestCycleInstrumentedTest {
                     socket.put("fd", fd)
                     if (fd >= 0) {
                         socket.put("link", Os.readlink("/proc/self/fd/$fd"))
-                        ParcelFileDescriptor.fromFd(fd).use { copy ->
+                        if (inspectMark) ParcelFileDescriptor.fromFd(fd).use { copy ->
                             try {
                                 // Linux SO_MARK=36. It is diagnostic only; no mark is changed.
                                 val get = Os::class.java.getMethod("getsockoptInt", java.io.FileDescriptor::class.java,
@@ -310,6 +310,83 @@ class GuestCycleInstrumentedTest {
         } finally { shell("appops set ${context.packageName} ACTIVATE_VPN ignore") }
         assertEquals("all short diagnostic cycles must be recorded", 30, completed)
         assertEquals("baseline and differential probes must succeed without retries", 0, failures)
+    }
+
+    /** Separate lifecycle observation; it does not replace the phase 8.2 baseline. */
+    @Test(timeout = 180000) fun lifecycleObservation() {
+        assumeTrue(Build.VERSION.SDK_INT >= 29)
+        assertFalse("previous cleanup uncertain", cleanupUncertain)
+        shell("appops set ${context.packageName} ACTIVATE_VPN allow")
+        assertNull(VpnService.prepare(context))
+        val guestKey = KeyPair(Key.fromBase64("YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="))
+        val ownerKey = KeyPair(Key.fromBase64("YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI="))
+        val config = Config.Builder().setInterface(Interface.Builder().setKeyPair(guestKey)
+            .addAddress(InetNetwork.parse("10.77.0.2/32")).setMtu(1280).build())
+            .addPeer(Peer.Builder().setPublicKey(ownerKey.publicKey)
+                .setEndpoint(InetEndpoint.parse("10.0.2.2:38673"))
+                .addAllowedIp(InetNetwork.parse("0.0.0.0/0")).build()).build()
+        val guest = GuestTunnel(context)
+        var completed = 0
+        var failures = 0
+        try {
+            for (cycle in 0 until 8) {
+                val row = JSONObject().put("cycle", cycle).put("beginElapsedMs", SystemClock.elapsedRealtime()).put("probeCycle", cycle + 100)
+                    .put("tunEstablishedEvent", "unavailable-in-public-aar")
+                    .put("socketOpenedEvent", "unavailable-in-public-aar")
+                    .put("protectResult", "unavailable-in-public-aar")
+                    .put("handshakeEvent", "not-exposed-snapshot-only")
+                    .put("tunPacketEvent", "not-exposed")
+                val errors = mutableListOf<String>()
+                var uncertain = false
+                var sockets: JSONObject? = null
+                try {
+                    row.put("stateBefore", lifecycleCall { guest.state() }.toString())
+                        .put("serviceBefore", serviceRunning()).put("before", recordProbe(probe(cycle + 100, stopped = true)))
+                    if (!row.getJSONObject("before").optBoolean("vpnGone")) error("prior VPN remains")
+                    row.put("startCalledElapsedMs", SystemClock.elapsedRealtime())
+                    row.put("startReturnedState", lifecycleCall { guest.start(config) }.toString())
+                        .put("startReturnedElapsedMs", SystemClock.elapsedRealtime()).put("serviceAfterStart", serviceRunning())
+                    // Test-only reflection: FD snapshot is not an opening event or proof of protect.
+                    sockets = lifecycleCall { wireGuardSockets(guest, inspectMark = false) }
+                    row.put("socketSnapshotAfterStart", sockets).put("socketSnapshotElapsedMs", SystemClock.elapsedRealtime())
+                    row.put("networkAfterStart", recordProbe(probe(cycle + 100, inspect = true)))
+                    val sample = probe(cycle + 100, variant = "A")
+                    row.put("firstProbe", recordProbe(sample))
+                    val stats = lifecycleCall { guest.statistics() }
+                    row.put("statisticsObservedElapsedMs", SystemClock.elapsedRealtime())
+                        .put("wgTxBytes", stats.totalTx()).put("wgRxBytes", stats.totalRx())
+                        .put("latestHandshakeEpochMs", stats.peer(ownerKey.publicKey)?.latestHandshakeEpochMillis() ?: 0L)
+                    if (!sample.getBoolean("sent") || !sample.getBoolean("echo")) errors.add("probe")
+                    if (row.optString("startReturnedState") != "UP") errors.add("start")
+                } catch (e: TimeoutException) {
+                    errors.add("lifecycle-timeout"); uncertain = true
+                } catch (e: Exception) { errors.add("exception:${e.javaClass.simpleName}") }
+                finally {
+                    try {
+                        if (uncertain) throw IllegalStateException("lifecycle uncertain")
+                        row.put("stopCalledElapsedMs", SystemClock.elapsedRealtime())
+                        val state = lifecycleCall { guest.stop() }
+                        row.put("stopReturnedState", state.toString()).put("stopReturnedElapsedMs", SystemClock.elapsedRealtime())
+                            .put("serviceAfterStop", serviceRunning()).put("after", recordProbe(probe(cycle + 100, stopped = true)))
+                        sockets?.let { row.put("socketSnapshotAfterStop", socketsClosed(it)) }
+                        val marker = Any(); val released = VpnRoleLease.acquire(marker)
+                        if (released) VpnRoleLease.release(marker) else { errors.add("lease"); uncertain = true }
+                        row.put("leaseReleased", released)
+                        if (state != Tunnel.State.DOWN || serviceRunning() || !row.getJSONObject("after").optBoolean("vpnGone")) {
+                            errors.add("cleanup"); uncertain = true
+                        }
+                    } catch (e: Exception) { errors.add("stop:${e.javaClass.simpleName}"); uncertain = true }
+                    row.put("errors", errors.joinToString(",")).put("endElapsedMs", SystemClock.elapsedRealtime())
+                    val parts = row.toString().chunked(1000)
+                    parts.forEachIndexed { i, part -> android.util.Log.i("NexaLinkLife", "PART=$cycle:$i/${parts.size}:$part") }
+                    completed++
+                    if (errors.isNotEmpty()) failures++
+                }
+                if (uncertain) { cleanupUncertain = true; break }
+            }
+        } finally { shell("appops set ${context.packageName} ACTIVATE_VPN ignore") }
+        assertEquals("all lifecycle observations recorded", 8, completed)
+        assertEquals("no probe or lifecycle failures", 0, failures)
     }
 
     @Test(timeout = 2400000) fun oneHundredRealGuestCycles() {
